@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from "react";
 import { ChatMessage, Message } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { Sparkles } from "lucide-react";
-// Removido o import do supabase que dependia de créditos
 import { useToast } from "@/hooks/use-toast";
 
 interface ChatAreaProps {
@@ -10,18 +9,9 @@ interface ChatAreaProps {
 }
 
 const modeInfo: Record<string, { title: string; description: string }> = {
-  code: {
-    title: "Kojak Code",
-    description: "Crie aplicativos, scripts e código em qualquer linguagem de programação.",
-  },
-  vision: {
-    title: "Kojak Vision",
-    description: "Gere imagens profissionais e criativas com inteligência artificial.",
-  },
-  motion: {
-    title: "Kojak Motion",
-    description: "Produza vídeos em alta definição com IA generativa.",
-  },
+  code: { title: "Kojak Code", description: "Crie aplicativos e scripts profissionais." },
+  vision: { title: "Kojak Vision", description: "Gere imagens cinematográficas com IA." },
+  motion: { title: "Kojak Motion", description: "Produza vídeos em alta definição." },
 };
 
 export function ChatArea({ mode }: ChatAreaProps) {
@@ -31,113 +21,89 @@ export function ChatArea({ mode }: ChatAreaProps) {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
-  useEffect(() => {
-    setActiveMode(mode);
-  }, [mode]);
-
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  useEffect(() => { setActiveMode(mode); }, [mode]);
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
   const sendMessage = async (content: string, selectedMode: string) => {
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: "user",
-      content,
-      type: "text",
-      timestamp: new Date(),
-    };
-
+    const userMessage: Message = { id: Date.now().toString(), role: "user", content, type: "text", timestamp: new Date() };
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
 
     try {
-      // CHAMADA DIRETA PARA A VERCEL (Independente de créditos do Lovable)
       const response = await fetch('/api/kojak', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: content, modo: selectedMode }),
       });
-
-      if (!response.ok) {
-        throw new Error("Erro na comunicação com o servidor. Verifique as chaves na Vercel.");
-      }
-
       const data = await response.json();
+      if (data.error) throw new Error(data.error);
 
       const assistantMessage: Message = {
-        id: data.id || (Date.now() + 1).toString(),
+        id: data.id || Date.now().toString(),
         role: "assistant",
         content: data.content,
         type: data.type || "text",
-        language: data.language,
         mediaUrl: data.mediaUrl,
-        timestamp: new Date(data.timestamp || Date.now()),
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-    } catch (error) {
-      console.error("Erro Kojak:", error);
-      const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
-      
-      toast({
-        title: "Erro de Conexão",
-        description: errorMessage,
-        variant: "destructive",
-      });
-
-      const errorAssistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: `Desculpe, ocorreu um erro: ${errorMessage}. Verifique se as APIs estão configuradas na Vercel.`,
-        type: "text",
         timestamp: new Date(),
       };
-      setMessages((prev) => [...prev, errorAssistantMessage]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSuggestionClick = (suggestion: string) => {
-    sendMessage(suggestion, activeMode);
+      setMessages((prev) => [...prev, assistantMessage]);
+    } catch (error: any) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    } finally { setIsLoading(false); }
   };
 
   const currentModeInfo = modeInfo[activeMode] || modeInfo.code;
 
   return (
-    // Adicionado pb-20 no mobile para não cobrir o input com a barra inferior
-    <div className="flex flex-col h-full pb-20 md:pb-0">
-      {/* Header */}
-      <header className="sticky top-0 z-10 px-6 py-4 bg-background/80 backdrop-blur-lg border-b border-kojak-border">
-        <h1 className="text-xl font-semibold text-foreground">{currentModeInfo.title}</h1>
-        <p className="text-sm text-muted-foreground">{currentModeInfo.description}</p>
+    <div className="flex flex-col h-full bg-background">
+      <header className="px-6 py-4 border-b border-kojak-border bg-background/50 backdrop-blur-md">
+        <h1 className="text-xl font-bold text-white">{currentModeInfo.title}</h1>
+        <p className="text-xs text-kojak-text-secondary">{currentModeInfo.description}</p>
       </header>
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto chat-scrollbar px-4 md:px-6 py-6">
+      <div className="flex-1 overflow-y-auto p-4 md:p-6">
         {messages.length === 0 ? (
-          <EmptyState mode={activeMode} onSuggestionClick={handleSuggestionClick} />
+          <EmptyState mode={activeMode} onSuggestionClick={(s) => sendMessage(s, activeMode)} />
         ) : (
           <div className="max-w-3xl mx-auto space-y-6">
-            {messages.map((message) => (
-              <ChatMessage key={message.id} message={message} />
-            ))}
+            {messages.map((m) => <ChatMessage key={m.id} message={m} />)}
             {isLoading && <LoadingIndicator />}
             <div ref={chatEndRef} />
           </div>
         )}
       </div>
-
-      {/* Input */}
-      <ChatInput
-        onSend={sendMessage}
-        isLoading={isLoading}
-        activeMode={activeMode}
-        onModeChange={setActiveMode}
-      />
+      <div className="p-4 bg-background">
+        <ChatInput onSend={sendMessage} isLoading={isLoading} activeMode={activeMode} onModeChange={setActiveMode} />
+      </div>
     </div>
   );
 }
 
-// ... (Resto do código EmptyState e LoadingIndicator permanecem iguais)
+function EmptyState({ mode, onSuggestionClick }: any) {
+  const suggestions: any = {
+    code: ["Crie um site em React", "Script Python para automação"],
+    vision: ["Logo futurista roxa", "Cidade cyberpunk 4k"],
+    motion: ["Mar batendo nas rochas", "Explosão de cores"],
+  };
+  return (
+    <div className="flex flex-col items-center justify-center py-20 text-center">
+      <div className="p-4 bg-primary/10 rounded-full mb-6"><Sparkles className="w-8 h-8 text-primary" /></div>
+      <h2 className="text-2xl font-bold text-white mb-2">Como posso ajudar?</h2>
+      <div className="flex flex-wrap justify-center gap-2">
+        {suggestions[mode]?.map((s: string) => (
+          <button key={s} onClick={() => onSuggestionClick(s)} className="px-4 py-2 bg-kojak-surface border border-kojak-border rounded-full text-sm hover:border-primary transition-all">
+            {s}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LoadingIndicator() {
+  return (
+    <div className="flex items-center gap-2 text-primary animate-pulse">
+      <div className="w-2 h-2 bg-primary rounded-full" />
+      <span className="text-sm font-medium">Kojak está pensando...</span>
+    </div>
+  );
+}

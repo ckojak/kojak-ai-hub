@@ -11,48 +11,44 @@ const recentActivity = [
   { type: "code", title: "API REST em Python", time: "2 min atrás" },
   { type: "vision", title: "Logo minimalista", time: "15 min atrás" },
   { type: "motion", title: "Vídeo promocional", time: "1 hora atrás" },
-  { type: "code", title: "Dashboard React", time: "3 horas atrás" },
 ];
 
 export function Dashboard() {
   return (
-    <div className="max-w-5xl mx-auto px-6 py-8 animate-fade-in">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-foreground mb-2">
-          Bem-vindo ao <span className="text-gradient-purple">Kojak AI</span>
+    <div className="max-w-5xl mx-auto px-4 md:px-6 py-8 animate-fade-in flex flex-col items-center">
+      
+      {/* Header Centralizado */}
+      <div className="mb-12 text-center flex flex-col items-center">
+        <h1 className="text-3xl md:text-5xl font-bold text-foreground mb-4">
+          Bem-vindo ao <span className="text-primary">Kojak AI</span>
         </h1>
-        <p className="text-muted-foreground">
+        <p className="text-muted-foreground max-w-md mx-auto">
           Sua plataforma de inteligência artificial multimodal
         </p>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      {/* Stats Grid - Centralizado */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10 w-full">
         {stats.map((stat, index) => (
           <div
             key={stat.label}
-            className="p-5 rounded-xl bg-kojak-surface border border-kojak-border hover:border-primary/30 transition-all duration-300 group"
-            style={{ animationDelay: `${index * 100}ms` }}
+            className="p-5 rounded-xl bg-kojak-surface border border-kojak-border flex flex-col items-center text-center group hover:border-primary/30 transition-all"
           >
-            <div className="flex items-start justify-between mb-3">
-              <div className="p-2 rounded-lg bg-primary/10 text-primary group-hover:bg-primary/20 transition-colors">
-                <stat.icon className="w-5 h-5" />
-              </div>
-              <div className="flex items-center gap-1 text-xs text-green-400">
-                <TrendingUp className="w-3 h-3" />
-                {stat.trend}
-              </div>
+            <div className="p-2 rounded-lg bg-primary/10 text-primary mb-3">
+              <stat.icon className="w-6 h-6" />
             </div>
-            <p className="text-2xl font-bold text-foreground mb-1">{stat.value}</p>
-            <p className="text-sm text-muted-foreground">{stat.label}</p>
+            <p className="text-2xl font-bold text-foreground">{stat.value}</p>
+            <p className="text-xs text-muted-foreground uppercase tracking-widest">{stat.label}</p>
+            <div className="flex items-center gap-1 text-[10px] text-green-400 mt-2">
+              <TrendingUp className="w-3 h-3" /> {stat.trend}
+            </div>
           </div>
         ))}
       </div>
 
-      {/* Quick Actions */}
-      <div className="mb-8">
-        <h2 className="text-lg font-semibold text-foreground mb-4">Ações Rápidas</h2>
+      {/* Quick Actions Centralizadas */}
+      <div className="w-full mb-10">
+        <h2 className="text-lg font-semibold text-center mb-6">Ações Rápidas</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <QuickActionCard
             icon={Code2}
@@ -64,7 +60,7 @@ export function Dashboard() {
             icon={Camera}
             title="Nova Imagem"
             description="Crie imagens profissionais com IA"
-            gradient="from-green-500 to-emerald-500"
+            gradient="from-purple-500 to-pink-500"
           />
           <QuickActionCard
             icon={Play}
@@ -75,9 +71,9 @@ export function Dashboard() {
         </div>
       </div>
 
-      {/* Recent Activity */}
-      <div>
-        <h2 className="text-lg font-semibold text-foreground mb-4">Atividade Recente</h2>
+      {/* Atividade Recente - Ocupa a largura total mas com estilo limpo */}
+      <div className="w-full max-w-2xl">
+        <h2 className="text-lg font-semibold text-center mb-4">Atividade Recente</h2>
         <div className="bg-kojak-surface border border-kojak-border rounded-xl overflow-hidden">
           {recentActivity.map((activity, index) => (
             <div
@@ -102,26 +98,14 @@ export function Dashboard() {
   );
 }
 
-function QuickActionCard({
-  icon: Icon,
-  title,
-  description,
-  gradient,
-}: {
-  icon: React.ElementType;
-  title: string;
-  description: string;
-  gradient: string;
-}) {
+function QuickActionCard({ icon: Icon, title, description, gradient }: any) {
   return (
-    <button className="group p-5 rounded-xl bg-kojak-surface border border-kojak-border hover:border-primary/30 transition-all duration-300 text-left">
-      <div
-        className={`inline-flex p-3 rounded-xl bg-gradient-to-br ${gradient} mb-4 group-hover:scale-110 transition-transform`}
-      >
-        <Icon className="w-5 h-5 text-white" />
+    <button className="flex flex-col items-center text-center group p-6 rounded-2xl bg-kojak-surface border border-kojak-border hover:border-primary/30 transition-all w-full">
+      <div className={`p-4 rounded-xl bg-gradient-to-br ${gradient} mb-4 group-hover:scale-110 transition-transform`}>
+        <Icon className="w-6 h-6 text-white" />
       </div>
-      <h3 className="text-base font-semibold text-foreground mb-1">{title}</h3>
-      <p className="text-sm text-muted-foreground">{description}</p>
+      <h3 className="text-base font-bold text-foreground mb-1">{title}</h3>
+      <p className="text-xs text-muted-foreground">{description}</p>
     </button>
   );
 }

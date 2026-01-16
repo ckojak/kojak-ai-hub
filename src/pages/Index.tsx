@@ -7,18 +7,12 @@ const Index = () => {
   const [activeMode, setActiveMode] = useState("dashboard");
 
   return (
-    // overflow-hidden impede que a tela inteira balance no celular
-    <div className="h-screen bg-background flex overflow-hidden">
-      {/* Sidebar - Ela já tem a lógica de PC/Mobile interna */}
+    <div className="min-h-screen bg-background flex">
+      {/* Sidebar */}
       <Sidebar activeMode={activeMode} onModeChange={setActiveMode} />
 
-      {/* Main Content 
-          ml-0: No celular, margem esquerda zero.
-          md:ml-64: No computador, margem esquerda de 64.
-          mb-16: No celular, margem embaixo para a barra de navegação não cobrir nada.
-          md:mb-0: No computador, margem embaixo zero.
-      */}
-      <main className="flex-1 transition-all duration-300 ml-0 md:ml-64 mb-16 md:mb-0 overflow-y-auto">
+      {/* Main Content */}
+      <main className="flex-1 ml-64 transition-all duration-300">
         {activeMode === "dashboard" ? (
           <Dashboard />
         ) : (

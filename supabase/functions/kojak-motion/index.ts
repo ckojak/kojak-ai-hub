@@ -6,33 +6,14 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
     const { prompt } = await req.json();
-
-    if (!prompt) {
-      return new Response(
-        JSON.stringify({ error: "Prompt é obrigatório" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
     const REPLICATE_API_TOKEN = Deno.env.get("REPLICATE_API_TOKEN");
-    if (!REPLICATE_API_TOKEN) {
-      return new Response(
-        JSON.stringify({ 
-          error: "REPLICATE_API_TOKEN não configurado. Por favor, configure sua chave API do Replicate.",
-          requiresSetup: true 
-        }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
 
-    // Create prediction with Luma Ray model
-    const createResponse = await fetch("https://api.replicate.com/v1/predictions", {
+    // Inicia a geração
+    const res = await fetch("https://api.replicate.com/v1/predictions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${REPLICATE_API_TOKEN}`,
@@ -40,72 +21,19 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         version: "8cc2a41c06fb2a20f79fda3db25cdee70da8a0bcde0a1c6cdabec8d1b3c9dde2",
-        input: {
-          prompt: prompt,
-          aspect_ratio: "16:9",
-          loop: false,
-        },
+        input: { prompt, aspect_ratio: "16:9" },
       }),
     });
 
-    if (!createResponse.ok) {
-      const errorText = await createResponse.text();
-      console.error("Replicate create error:", createResponse.status, errorText);
-      throw new Error("Erro ao iniciar geração de vídeo");
-    }
-
-    const prediction = await createResponse.json();
+    const prediction = await res.json();
     
-    // Poll for completion
-    let result = prediction;
-    let attempts = 0;
-    const maxAttempts = 120; // 10 minutes max (5 seconds * 120)
+    // RETORNA IMEDIATAMENTE O ID (Evita o timeout de 60s)
+    return new Response(JSON.stringify({ 
+      prediction_id: prediction.id,
+      status: "starting" 
+    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    while (result.status !== "succeeded" && result.status !== "failed" && attempts < maxAttempts) {
-      await new Promise((resolve) => setTimeout(resolve, 5000)); // Wait 5 seconds
-      
-      const statusResponse = await fetch(`https://api.replicate.com/v1/predictions/${result.id}`, {
-        headers: {
-          Authorization: `Bearer ${REPLICATE_API_TOKEN}`,
-        },
-      });
-      
-      if (!statusResponse.ok) {
-        throw new Error("Erro ao verificar status do vídeo");
-      }
-      
-      result = await statusResponse.json();
-      attempts++;
-    }
-
-    if (result.status === "failed") {
-      throw new Error(result.error || "Falha na geração do vídeo");
-    }
-
-    if (result.status !== "succeeded") {
-      throw new Error("Tempo limite excedido na geração do vídeo");
-    }
-
-    const videoUrl = result.output;
-
-    const response = {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content: "Vídeo gerado com sucesso! Confira o resultado abaixo:",
-      type: "video",
-      mediaUrl: videoUrl,
-      timestamp: new Date().toISOString(),
-    };
-
-    return new Response(
-      JSON.stringify(response),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (error) {
-    console.error("Kojak Motion error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Erro desconhecido" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+  } catch (error: any) {
+    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders });
   }
 });

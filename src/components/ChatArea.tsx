@@ -2,23 +2,28 @@ import { useState, useRef, useEffect } from "react";
 import { ChatMessage, Message } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { Sparkles } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface ChatAreaProps {
   mode: string;
 }
 
-const modeInfo: Record<string, { title: string; description: string }> = {
+const modeInfo: Record<string, { title: string; description: string; function: string }> = {
   code: {
     title: "Kojak Code",
     description: "Crie aplicativos, scripts e código em qualquer linguagem de programação.",
+    function: "kojak-code",
   },
   vision: {
     title: "Kojak Vision",
     description: "Gere imagens profissionais e criativas com inteligência artificial.",
+    function: "kojak-vision",
   },
   motion: {
     title: "Kojak Motion",
     description: "Produza vídeos em alta definição com IA generativa.",
+    function: "kojak-motion",
   },
 };
 
@@ -27,6 +32,7 @@ export function ChatArea({ mode }: ChatAreaProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [activeMode, setActiveMode] = useState(mode);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     setActiveMode(mode);
@@ -49,53 +55,67 @@ export function ChatArea({ mode }: ChatAreaProps) {
     setIsLoading(true);
 
     try {
-      // Prepare for API call
-      const payload = {
-        prompt: content,
-        modo: selectedMode,
-      };
+      const modeConfig = modeInfo[selectedMode] || modeInfo.code;
+      
+      const { data, error } = await supabase.functions.invoke(modeConfig.function, {
+        body: { prompt: content },
+      });
 
-      // Simulated response for demonstration
-      // In production, this would be: await fetch('/api/kojak', { method: 'POST', body: JSON.stringify(payload) })
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
-      let assistantMessage: Message;
-
-      if (selectedMode === "code") {
-        assistantMessage = {
-          id: (Date.now() + 1).toString(),
-          role: "assistant",
-          content: `// Exemplo de código gerado\nfunction saudacao(nome: string): string {\n  return \`Olá, \${nome}! Bem-vindo ao Kojak AI.\`;\n}\n\nconsole.log(saudacao("Desenvolvedor"));`,
-          type: "code",
-          language: "typescript",
-          timestamp: new Date(),
-        };
-      } else if (selectedMode === "vision") {
-        assistantMessage = {
-          id: (Date.now() + 1).toString(),
-          role: "assistant",
-          content: "Imagem gerada com sucesso! Aqui está sua criação:",
-          type: "image",
-          mediaUrl: "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=800&q=80",
-          timestamp: new Date(),
-        };
-      } else {
-        assistantMessage = {
-          id: (Date.now() + 1).toString(),
-          role: "assistant",
-          content: "Vídeo gerado com sucesso! Confira o resultado:",
-          type: "video",
-          mediaUrl: "https://www.w3schools.com/html/mov_bbb.mp4",
-          timestamp: new Date(),
-        };
+      if (error) {
+        throw new Error(error.message || "Erro ao processar requisição");
       }
+
+      if (data.error) {
+        if (data.requiresSetup) {
+          toast({
+            title: "Configuração necessária",
+            description: data.error,
+            variant: "destructive",
+          });
+        } else {
+          throw new Error(data.error);
+        }
+        return;
+      }
+
+      const assistantMessage: Message = {
+        id: data.id || (Date.now() + 1).toString(),
+        role: "assistant",
+        content: data.content,
+        type: data.type || "text",
+        language: data.language,
+        mediaUrl: data.mediaUrl,
+        timestamp: new Date(data.timestamp || Date.now()),
+      };
 
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
       console.error("Erro ao enviar mensagem:", error);
+      
+      const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
+      
+      toast({
+        title: "Erro",
+        description: errorMessage,
+        variant: "destructive",
+      });
+
+      // Add error message to chat
+      const errorAssistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: `Desculpe, ocorreu um erro: ${errorMessage}. Por favor, tente novamente.`,
+        type: "text",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, errorAssistantMessage]);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSuggestionClick = (suggestion: string) => {
+    sendMessage(suggestion, activeMode);
   };
 
   const currentModeInfo = modeInfo[activeMode] || modeInfo.code;
@@ -111,7 +131,7 @@ export function ChatArea({ mode }: ChatAreaProps) {
       {/* Messages */}
       <div className="flex-1 overflow-y-auto chat-scrollbar px-6 py-6">
         {messages.length === 0 ? (
-          <EmptyState mode={activeMode} />
+          <EmptyState mode={activeMode} onSuggestionClick={handleSuggestionClick} />
         ) : (
           <div className="max-w-3xl mx-auto space-y-6">
             {messages.map((message) => (
@@ -134,12 +154,12 @@ export function ChatArea({ mode }: ChatAreaProps) {
   );
 }
 
-function EmptyState({ mode }: { mode: string }) {
+function EmptyState({ mode, onSuggestionClick }: { mode: string; onSuggestionClick: (suggestion: string) => void }) {
   const suggestions: Record<string, string[]> = {
     code: [
-      "Crie uma API REST em Node.js",
-      "Faça um componente React de login",
-      "Escreva um script Python para automação",
+      "Crie uma API REST em Node.js com Express",
+      "Faça um componente React de formulário de login",
+      "Escreva um script Python para web scraping",
     ],
     vision: [
       "Logo minimalista para startup de tecnologia",
@@ -147,9 +167,9 @@ function EmptyState({ mode }: { mode: string }) {
       "Banner profissional para rede social",
     ],
     motion: [
-      "Vídeo promocional de 30 segundos",
-      "Animação de logo para intro",
-      "Vídeo explicativo com motion graphics",
+      "Ondas do mar ao pôr do sol em câmera lenta",
+      "Animação abstrata com partículas coloridas",
+      "Paisagem de montanhas com nuvens passando",
     ],
   };
 
@@ -168,6 +188,7 @@ function EmptyState({ mode }: { mode: string }) {
         {(suggestions[mode] || suggestions.code).map((suggestion, index) => (
           <button
             key={index}
+            onClick={() => onSuggestionClick(suggestion)}
             className="px-4 py-2 rounded-full bg-kojak-surface border border-kojak-border text-sm text-foreground hover:border-primary/50 hover:bg-kojak-charcoal transition-all duration-200"
           >
             {suggestion}
@@ -189,6 +210,7 @@ function LoadingIndicator() {
         <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: "150ms" }} />
         <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: "300ms" }} />
       </div>
+      <span className="text-sm text-muted-foreground">Processando...</span>
     </div>
   );
 }

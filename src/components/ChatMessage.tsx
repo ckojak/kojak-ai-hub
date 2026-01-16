@@ -1,6 +1,7 @@
-import { Download, Copy, Check, Play, Pause } from "lucide-react";
+import { Download, Copy, Check } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import ReactMarkdown from "react-markdown";
 
 export interface Message {
   id: string;
@@ -18,7 +19,6 @@ interface ChatMessageProps {
 
 export function ChatMessage({ message }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
 
   const isUser = message.role === "user";
 
@@ -32,6 +32,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
     const link = document.createElement("a");
     link.href = url;
     link.download = filename;
+    link.target = "_blank";
     link.click();
   };
 
@@ -63,18 +64,17 @@ export function ChatMessage({ message }: ChatMessageProps) {
             : "bg-kojak-charcoal text-foreground rounded-tl-sm border border-kojak-border"
         )}
       >
-        {/* Text Content */}
+        {/* Text Content with Markdown */}
         {(!message.type || message.type === "text") && (
-          <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+          <div className="text-sm leading-relaxed prose prose-invert prose-sm max-w-none">
+            <ReactMarkdown>{message.content}</ReactMarkdown>
+          </div>
         )}
 
-        {/* Code Block */}
+        {/* Code Block with Markdown */}
         {message.type === "code" && (
-          <div className="code-block">
-            <div className="flex items-center justify-between px-4 py-2 bg-kojak-dark border-b border-kojak-border">
-              <span className="text-xs text-kojak-text-secondary font-mono">
-                {message.language || "código"}
-              </span>
+          <div className="space-y-2">
+            <div className="flex items-center justify-end">
               <button
                 onClick={() => handleCopy(message.content)}
                 className="flex items-center gap-1 text-xs text-kojak-text-secondary hover:text-primary transition-colors"
@@ -92,9 +92,32 @@ export function ChatMessage({ message }: ChatMessageProps) {
                 )}
               </button>
             </div>
-            <pre className="p-4 overflow-x-auto text-sm font-mono text-foreground">
-              <code>{message.content}</code>
-            </pre>
+            <div className="prose prose-invert prose-sm max-w-none overflow-x-auto">
+              <ReactMarkdown
+                components={{
+                  pre: ({ children }) => (
+                    <pre className="bg-kojak-dark rounded-lg p-4 overflow-x-auto border border-kojak-border">
+                      {children}
+                    </pre>
+                  ),
+                  code: ({ className, children, ...props }) => {
+                    const match = /language-(\w+)/.exec(className || "");
+                    const isInline = !match;
+                    return isInline ? (
+                      <code className="bg-kojak-surface px-1.5 py-0.5 rounded text-primary" {...props}>
+                        {children}
+                      </code>
+                    ) : (
+                      <code className={cn("text-sm font-mono", className)} {...props}>
+                        {children}
+                      </code>
+                    );
+                  },
+                }}
+              >
+                {message.content}
+              </ReactMarkdown>
+            </div>
           </div>
         )}
 
@@ -134,8 +157,6 @@ export function ChatMessage({ message }: ChatMessageProps) {
                 src={message.mediaUrl}
                 className="w-full max-w-lg rounded-lg"
                 controls
-                onPlay={() => setIsPlaying(true)}
-                onPause={() => setIsPlaying(false)}
               />
               <button
                 onClick={() => handleDownload(message.mediaUrl!, "kojak-video.mp4")}

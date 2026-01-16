@@ -1,4 +1,4 @@
-import { Download, Copy, Check, User, Sparkles } from "lucide-react";
+import { Download, Copy, Check } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
@@ -19,6 +19,7 @@ interface ChatMessageProps {
 
 export function ChatMessage({ message }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
+
   const isUser = message.role === "user";
 
   const handleCopy = async (text: string) => {
@@ -36,111 +37,148 @@ export function ChatMessage({ message }: ChatMessageProps) {
   };
 
   return (
-    <div className={cn(
-      "flex gap-3 md:gap-4 animate-fade-in mb-6",
-      isUser ? "flex-row-reverse" : "flex-row"
-    )}>
-      {/* Avatar Futurista */}
-      <div className={cn(
-        "flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center text-[10px] font-bold uppercase tracking-tighter",
-        isUser
-          ? "bg-purple-600 text-white shadow-[0_0_15px_rgba(147,51,234,0.4)]"
-          : "bg-gradient-to-br from-blue-600 to-purple-600 text-white shadow-[0_0_15px_rgba(37,99,235,0.4)]"
-      )}>
-        {isUser ? <User className="w-5 h-5" /> : <Sparkles className="w-5 h-5" />}
+    <div
+      className={cn(
+        "flex gap-4 animate-fade-in",
+        isUser ? "flex-row-reverse" : "flex-row"
+      )}
+    >
+      {/* Avatar */}
+      <div
+        className={cn(
+          "flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-xs font-semibold",
+          isUser
+            ? "bg-kojak-surface text-foreground"
+            : "bg-gradient-purple text-primary-foreground glow-purple"
+        )}
+      >
+        {isUser ? "Você" : "K"}
       </div>
 
-      {/* Balão de Mensagem */}
-      <div className={cn(
-        "max-w-[85%] md:max-w-[75%] rounded-2xl px-4 py-3 shadow-2xl",
-        isUser
-          ? "bg-purple-700 text-white rounded-tr-none border border-purple-500/30" // ROXO PARA O USUÁRIO
-          : "bg-white/5 backdrop-blur-xl text-blue-50 rounded-tl-none border border-white/10" // ESTILO VIDRO PARA KOJAK
-      )}>
-        
-        {/* Conteúdo de Texto / Markdown */}
-        {(!message.type || message.type === "text" || message.type === "code") && (
-          <div className={cn(
-            "text-sm leading-relaxed prose prose-sm max-w-none",
-            isUser ? "prose-invert" : "prose-invert opacity-90"
-          )}>
-            <ReactMarkdown
-              components={{
-                // Estilização customizada para blocos de código
-                pre: ({ children }) => (
-                  <div className="relative group/code my-4">
-                    <pre className="bg-black/40 rounded-xl p-4 overflow-x-auto border border-white/5 backdrop-blur-sm">
+      {/* Message Content */}
+      <div
+        className={cn(
+          "max-w-[80%] rounded-2xl px-4 py-3",
+          isUser
+            ? "bg-kojak-surface text-foreground rounded-tr-sm"
+            : "bg-kojak-charcoal text-foreground rounded-tl-sm border border-kojak-border"
+        )}
+      >
+        {/* Text Content with Markdown */}
+        {(!message.type || message.type === "text") && (
+          <div className="text-sm leading-relaxed prose prose-invert prose-sm max-w-none">
+            <ReactMarkdown>{message.content}</ReactMarkdown>
+          </div>
+        )}
+
+        {/* Code Block with Markdown */}
+        {message.type === "code" && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-end">
+              <button
+                onClick={() => handleCopy(message.content)}
+                className="flex items-center gap-1 text-xs text-kojak-text-secondary hover:text-primary transition-colors"
+              >
+                {copied ? (
+                  <>
+                    <Check className="w-3 h-3" />
+                    Copiado
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3 h-3" />
+                    Copiar
+                  </>
+                )}
+              </button>
+            </div>
+            <div className="prose prose-invert prose-sm max-w-none overflow-x-auto">
+              <ReactMarkdown
+                components={{
+                  pre: ({ children }) => (
+                    <pre className="bg-kojak-dark rounded-lg p-4 overflow-x-auto border border-kojak-border">
                       {children}
                     </pre>
-                  </div>
-                ),
-                code: ({ className, children, ...props }: any) => {
-                  const match = /language-(\w+)/.exec(className || "");
-                  return !match ? (
-                    <code className="bg-white/10 px-1.5 py-0.5 rounded text-purple-300" {...props}>
-                      {children}
-                    </code>
-                  ) : (
-                    <code className={cn("text-xs font-mono text-blue-200", className)} {...props}>
-                      {children}
-                    </code>
-                  );
-                },
-              }}
-            >
-              {message.content}
-            </ReactMarkdown>
+                  ),
+                  code: ({ className, children, ...props }) => {
+                    const match = /language-(\w+)/.exec(className || "");
+                    const isInline = !match;
+                    return isInline ? (
+                      <code className="bg-kojak-surface px-1.5 py-0.5 rounded text-primary" {...props}>
+                        {children}
+                      </code>
+                    ) : (
+                      <code className={cn("text-sm font-mono", className)} {...props}>
+                        {children}
+                      </code>
+                    );
+                  },
+                }}
+              >
+                {message.content}
+              </ReactMarkdown>
+            </div>
           </div>
         )}
 
-        {/* Botão de Copiar (Apenas se for código ou texto longo) */}
-        {!isUser && message.content.length > 20 && (
-          <div className="flex justify-end mt-2">
-            <button
-              onClick={() => handleCopy(message.content)}
-              className="flex items-center gap-1.5 text-[10px] uppercase font-bold text-white/40 hover:text-purple-400 transition-colors"
-            >
-              {copied ? <><Check className="w-3 h-3" /> Copiado</> : <><Copy className="w-3 h-3" /> Copiar</>}
-            </button>
-          </div>
-        )}
-
-        {/* Mídia: Imagem */}
+        {/* Image */}
         {message.type === "image" && message.mediaUrl && (
-          <div className="space-y-3 mt-2">
-            <div className="relative group rounded-xl overflow-hidden border border-white/10">
-              <img src={message.mediaUrl} alt="IA Content" className="w-full max-w-md" />
-              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+          <div className="space-y-3">
+            {message.content && (
+              <p className="text-sm text-muted-foreground mb-2">{message.content}</p>
+            )}
+            <div className="relative group rounded-lg overflow-hidden">
+              <img
+                src={message.mediaUrl}
+                alt="Imagem gerada"
+                className="w-full max-w-md rounded-lg"
+              />
+              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                 <button
-                  onClick={() => handleDownload(message.mediaUrl!, "kojak-img.png")}
-                  className="p-3 bg-purple-600 text-white rounded-full hover:scale-110 transition-transform"
+                  onClick={() => handleDownload(message.mediaUrl!, "kojak-image.png")}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
                 >
-                  <Download className="w-5 h-5" />
+                  <Download className="w-4 h-4" />
+                  Baixar
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* Mídia: Vídeo */}
+        {/* Video */}
         {message.type === "video" && message.mediaUrl && (
-          <div className="mt-2 relative rounded-xl overflow-hidden bg-black border border-white/10">
-            <video src={message.mediaUrl} className="w-full max-w-lg" controls />
-            <button
-              onClick={() => handleDownload(message.mediaUrl!, "kojak-vid.mp4")}
-              className="absolute top-2 right-2 p-2 bg-purple-600/80 hover:bg-purple-600 text-white rounded-lg transition-colors"
-            >
-              <Download className="w-4 h-4" />
-            </button>
+          <div className="space-y-3">
+            {message.content && (
+              <p className="text-sm text-muted-foreground mb-2">{message.content}</p>
+            )}
+            <div className="relative rounded-lg overflow-hidden bg-black">
+              <video
+                src={message.mediaUrl}
+                className="w-full max-w-lg rounded-lg"
+                controls
+              />
+              <button
+                onClick={() => handleDownload(message.mediaUrl!, "kojak-video.mp4")}
+                className="absolute top-2 right-2 p-2 bg-black/70 hover:bg-primary text-white rounded-lg transition-colors"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         )}
 
-        {/* Timestamp / Horário */}
-        <div className={cn(
-          "mt-2 text-[10px] font-medium opacity-40 uppercase tracking-widest",
-          isUser ? "text-right" : "text-left"
-        )}>
-          {message.timestamp.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+        {/* Timestamp */}
+        <div
+          className={cn(
+            "mt-2 text-xs text-kojak-text-secondary",
+            isUser ? "text-right" : "text-left"
+          )}
+        >
+          {message.timestamp.toLocaleTimeString("pt-BR", {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
         </div>
       </div>
     </div>

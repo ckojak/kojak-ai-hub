@@ -1,15 +1,18 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { ChatArea } from "@/components/ChatArea";
 import { BottomBar } from "@/components/BottomBar";
 import { MobileHistorySheet } from "@/components/MobileHistorySheet";
+import { SettingsPanel } from "@/components/SettingsPanel";
 import { useChats, Message } from "@/hooks/useChats";
 import { useVoice } from "@/hooks/useVoice";
+import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { Loader2 } from "lucide-react";
 
 const modeConfig: Record<string, { function: string }> = {
-  chat: { function: "kojak-code" }, // Using code function for general chat with Gemini
+  chat: { function: "kojak-code" },
   code: { function: "kojak-code" },
   vision: { function: "kojak-vision" },
   motion: { function: "kojak-motion" },
@@ -19,7 +22,10 @@ const Index = () => {
   const [activeMode, setActiveMode] = useState("chat");
   const [isLoading, setIsLoading] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [localMessages, setLocalMessages] = useState<Message[]>([]);
+  
+  const { user, loading: authLoading, profile } = useAuth();
   
   const {
     chats,
@@ -44,40 +50,55 @@ const Index = () => {
 
   const { toast } = useToast();
 
-  // Use local messages if no chat is selected, otherwise use DB messages
-  const messages = currentChat ? dbMessages : localMessages;
+  // Use DB messages if authenticated and has a chat, otherwise use local
+  const messages = user && currentChat ? dbMessages : localMessages;
+
+  // Log activity when sending messages
+  const logActivity = useCallback(async (action: string, details?: any) => {
+    if (!user) return;
+    
+    await supabase.from("activity_log").insert({
+      user_id: user.id,
+      action,
+      details,
+    });
+  }, [user]);
 
   const handleSendMessage = useCallback(async (content: string, mode: string) => {
     if (!content.trim()) return;
 
-    // If no chat exists, create one
     let chatId = currentChat?.id;
-    if (!chatId) {
-      const newChat = await createChat(mode);
-      if (!newChat) {
-        toast({
-          title: "Erro",
-          description: "Não foi possível criar a conversa",
-          variant: "destructive",
-        });
-        return;
+
+    // If authenticated, create chat in DB
+    if (user) {
+      if (!chatId) {
+        const newChat = await createChat(mode);
+        if (!newChat) {
+          toast({
+            title: "Erro",
+            description: "Não foi possível criar a conversa",
+            variant: "destructive",
+          });
+          return;
+        }
+        chatId = newChat.id;
       }
-      chatId = newChat.id;
-    }
 
-    // Add user message
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      chat_id: chatId,
-      role: "user",
-      content,
-      type: "text",
-      created_at: new Date().toISOString(),
-    };
-
-    if (currentChat) {
+      // Add user message to DB
       await addMessage("user", content, "text");
+      
+      // Log activity
+      await logActivity(`Mensagem enviada no modo ${mode}`, { preview: content.slice(0, 100) });
     } else {
+      // Add to local state for non-authenticated users
+      const userMessage: Message = {
+        id: Date.now().toString(),
+        chat_id: "local",
+        role: "user",
+        content,
+        type: "text",
+        created_at: new Date().toISOString(),
+      };
       setLocalMessages(prev => [...prev, userMessage]);
     }
 
@@ -86,8 +107,14 @@ const Index = () => {
     try {
       const config = modeConfig[mode] || modeConfig.chat;
       
+      // Include personal context if available
+      const personalContext = profile?.personal_context || "";
+      const promptWithContext = personalContext 
+        ? `[Contexto do usuário: ${personalContext}]\n\n${content}`
+        : content;
+      
       const { data, error } = await supabase.functions.invoke(config.function, {
-        body: { prompt: content },
+        body: { prompt: promptWithContext },
       });
 
       if (error) {
@@ -99,17 +126,7 @@ const Index = () => {
       }
 
       // Add assistant message
-      const assistantMessage: Message = {
-        id: data.id || (Date.now() + 1).toString(),
-        chat_id: chatId,
-        role: "assistant",
-        content: data.content,
-        type: data.type || "text",
-        media_url: data.mediaUrl,
-        created_at: new Date().toISOString(),
-      };
-
-      if (currentChat) {
+      if (user && chatId) {
         await addMessage(
           "assistant",
           data.content,
@@ -123,11 +140,17 @@ const Index = () => {
           await updateChatTitle(chatId, title);
         }
       } else {
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          chat_id: "local",
+          role: "assistant",
+          content: data.content,
+          type: data.type || "text",
+          media_url: data.mediaUrl,
+          created_at: new Date().toISOString(),
+        };
         setLocalMessages(prev => [...prev, assistantMessage]);
       }
-
-      // Auto-speak response if enabled (optional)
-      // speak(data.content);
 
     } catch (error) {
       console.error("Erro ao enviar mensagem:", error);
@@ -143,14 +166,14 @@ const Index = () => {
       // Add error message
       const errorAssistantMessage: Message = {
         id: (Date.now() + 1).toString(),
-        chat_id: chatId,
+        chat_id: chatId || "local",
         role: "assistant",
         content: `Desculpe, ocorreu um erro: ${errorMessage}. Por favor, tente novamente.`,
         type: "text",
         created_at: new Date().toISOString(),
       };
 
-      if (currentChat) {
+      if (user && chatId) {
         await addMessage("assistant", errorAssistantMessage.content, "text");
       } else {
         setLocalMessages(prev => [...prev, errorAssistantMessage]);
@@ -158,16 +181,30 @@ const Index = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [currentChat, createChat, addMessage, updateChatTitle, dbMessages, toast]);
+  }, [user, currentChat, createChat, addMessage, updateChatTitle, dbMessages, profile, toast, logActivity]);
 
   const handleNewChat = useCallback(async () => {
-    await createChat(activeMode);
+    if (user) {
+      await createChat(activeMode);
+    }
     setLocalMessages([]);
-  }, [createChat, activeMode]);
+  }, [user, createChat, activeMode]);
 
   const handleModeChange = useCallback((mode: string) => {
     setActiveMode(mode);
   }, []);
+
+  // Show loading while auth is checking
+  if (authLoading) {
+    return (
+      <div className="h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
@@ -178,6 +215,7 @@ const Index = () => {
         onSelectChat={selectChat}
         onNewChat={handleNewChat}
         onDeleteChat={deleteChat}
+        onOpenSettings={() => setSettingsOpen(true)}
       />
 
       {/* Mobile History Sheet */}
@@ -189,6 +227,12 @@ const Index = () => {
         onSelectChat={selectChat}
         onNewChat={handleNewChat}
         onDeleteChat={deleteChat}
+      />
+
+      {/* Settings Panel */}
+      <SettingsPanel
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
       />
 
       {/* Main Content */}
@@ -214,6 +258,7 @@ const Index = () => {
         activeMode={activeMode}
         onModeChange={handleModeChange}
         onOpenHistory={() => setHistoryOpen(true)}
+        onOpenSettings={() => setSettingsOpen(true)}
       />
     </div>
   );

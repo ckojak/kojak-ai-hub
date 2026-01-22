@@ -81,6 +81,35 @@
     --background: 240 10% 3%;
     --foreground: 0 0% 98%;
   }
+
+  .light {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 10%;
+    --card: 0 0% 98%;
+    --card-foreground: 240 10% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 10%;
+    --primary: 270 91% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 70% 50%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 240 5% 92%;
+    --muted-foreground: 240 5% 40%;
+    --accent: 270 91% 55%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 5% 85%;
+    --input: 240 5% 90%;
+    --ring: 270 91% 55%;
+    --glass-bg: 240 10% 95%;
+    --glass-border: 240 5% 80%;
+    --kojak-surface: 240 8% 96%;
+    --kojak-border: 240 5% 85%;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 10% 10%;
+    --sidebar-border: 240 5% 90%;
+  }
 }
 
 @layer base {

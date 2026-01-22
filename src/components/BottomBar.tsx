@@ -1,10 +1,11 @@
-import { Code2, Camera, Play, MessageCircle, History } from "lucide-react";
+import { Code2, Camera, Play, MessageCircle, History, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface BottomBarProps {
   activeMode: string;
   onModeChange: (mode: string) => void;
   onOpenHistory: () => void;
+  onOpenSettings: () => void;
 }
 
 const modes = [
@@ -14,7 +15,7 @@ const modes = [
   { id: "motion", label: "Motion", icon: Play },
 ];
 
-export function BottomBar({ activeMode, onModeChange, onOpenHistory }: BottomBarProps) {
+export function BottomBar({ activeMode, onModeChange, onOpenHistory, onOpenSettings }: BottomBarProps) {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden">
       {/* Glassmorphism background */}
@@ -51,6 +52,15 @@ export function BottomBar({ activeMode, onModeChange, onOpenHistory }: BottomBar
             </button>
           );
         })}
+
+        {/* Settings Button */}
+        <button
+          onClick={onOpenSettings}
+          className="flex flex-col items-center gap-1 px-3 py-2 text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <Settings className="w-5 h-5" />
+          <span className="text-[10px] font-medium">Config</span>
+        </button>
       </div>
     </nav>
   );

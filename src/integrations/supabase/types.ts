@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      activity_log: {
+        Row: {
+          action: string
+          created_at: string
+          details: Json | null
+          id: string
+          user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       chats: {
         Row: {
           created_at: string
@@ -38,6 +62,33 @@ export type Database = {
           title?: string
           updated_at?: string
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      connected_apps: {
+        Row: {
+          app_icon: string | null
+          app_name: string
+          connected_at: string
+          id: string
+          status: string | null
+          user_id: string
+        }
+        Insert: {
+          app_icon?: string | null
+          app_name: string
+          connected_at?: string
+          id?: string
+          status?: string | null
+          user_id: string
+        }
+        Update: {
+          app_icon?: string | null
+          app_name?: string
+          connected_at?: string
+          id?: string
+          status?: string | null
+          user_id?: string
         }
         Relationships: []
       }
@@ -78,6 +129,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          email: string | null
+          full_name: string | null
+          id: string
+          location: string | null
+          personal_context: string | null
+          theme_preference: string | null
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id: string
+          location?: string | null
+          personal_context?: string | null
+          theme_preference?: string | null
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          location?: string | null
+          personal_context?: string | null
+          theme_preference?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
     }
     Views: {

@@ -5,10 +5,13 @@ import {
   ChevronRight,
   Plus,
   Settings,
-  User,
+  LogIn,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ChatHistory } from "./ChatHistory";
+import { useAuth } from "@/hooks/useAuth";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useNavigate } from "react-router-dom";
 import type { Chat } from "@/hooks/useChats";
 
 interface SidebarProps {
@@ -17,6 +20,7 @@ interface SidebarProps {
   onSelectChat: (chat: Chat) => void;
   onNewChat: () => void;
   onDeleteChat: (chatId: string) => void;
+  onOpenSettings: () => void;
 }
 
 export function Sidebar({ 
@@ -24,9 +28,12 @@ export function Sidebar({
   currentChatId, 
   onSelectChat, 
   onNewChat, 
-  onDeleteChat 
+  onDeleteChat,
+  onOpenSettings,
 }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const { user, profile } = useAuth();
+  const navigate = useNavigate();
 
   return (
     <aside
@@ -80,6 +87,7 @@ export function Sidebar({
       {/* Bottom Actions */}
       <div className="p-3 border-t border-white/10 space-y-1">
         <button
+          onClick={onOpenSettings}
           className={cn(
             "flex items-center gap-3 w-full px-3 py-2.5 rounded-xl transition-all",
             "text-muted-foreground hover:text-foreground hover:bg-white/5",
@@ -89,16 +97,47 @@ export function Sidebar({
           <Settings className="w-5 h-5" />
           {!collapsed && <span className="text-sm">Configurações</span>}
         </button>
-        <button
-          className={cn(
-            "flex items-center gap-3 w-full px-3 py-2.5 rounded-xl transition-all",
-            "text-muted-foreground hover:text-foreground hover:bg-white/5",
-            collapsed && "justify-center"
-          )}
-        >
-          <User className="w-5 h-5" />
-          {!collapsed && <span className="text-sm">Perfil</span>}
-        </button>
+
+        {/* User Profile / Login */}
+        {user && profile ? (
+          <div
+            onClick={onOpenSettings}
+            className={cn(
+              "flex items-center gap-3 p-2 rounded-xl cursor-pointer transition-all",
+              "hover:bg-white/5",
+              collapsed && "justify-center"
+            )}
+          >
+            <Avatar className="w-8 h-8">
+              <AvatarImage src={profile.avatar_url || undefined} />
+              <AvatarFallback className="bg-gradient-purple text-white text-xs">
+                {profile.full_name?.charAt(0).toUpperCase() || "K"}
+              </AvatarFallback>
+            </Avatar>
+            {!collapsed && (
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">
+                  {profile.full_name || "Usuário"}
+                </p>
+                <p className="text-[10px] text-muted-foreground truncate">
+                  {profile.email || user.email}
+                </p>
+              </div>
+            )}
+          </div>
+        ) : (
+          <button
+            onClick={() => navigate("/auth")}
+            className={cn(
+              "flex items-center gap-3 w-full px-3 py-2.5 rounded-xl transition-all",
+              "text-primary hover:bg-primary/10",
+              collapsed && "justify-center"
+            )}
+          >
+            <LogIn className="w-5 h-5" />
+            {!collapsed && <span className="text-sm font-medium">Fazer login</span>}
+          </button>
+        )}
       </div>
 
       {/* Collapse Toggle */}

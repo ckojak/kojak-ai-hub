@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "./useAuth";
 
 export interface Chat {
   id: string;
+  user_id: string;
   title: string;
   mode: string;
   created_at: string;
@@ -24,18 +26,26 @@ export function useChats() {
   const [currentChat, setCurrentChat] = useState<Chat | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
+  
+  const { user } = useAuth();
 
-  // Fetch all chats
+  // Fetch all chats for the current user
   const fetchChats = useCallback(async () => {
+    if (!user) {
+      setChats([]);
+      return;
+    }
+
     const { data, error } = await supabase
       .from("chats")
       .select("*")
+      .eq("user_id", user.id)
       .order("updated_at", { ascending: false });
 
     if (!error && data) {
       setChats(data);
     }
-  }, []);
+  }, [user]);
 
   // Fetch messages for a specific chat
   const fetchMessages = useCallback(async (chatId: string) => {
@@ -54,9 +64,15 @@ export function useChats() {
 
   // Create a new chat
   const createChat = useCallback(async (mode: string = "chat") => {
+    if (!user) return null;
+
     const { data, error } = await supabase
       .from("chats")
-      .insert({ mode, title: "Nova Conversa" })
+      .insert({ 
+        user_id: user.id,
+        mode, 
+        title: "Nova Conversa" 
+      })
       .select()
       .single();
 
@@ -67,7 +83,7 @@ export function useChats() {
       return data;
     }
     return null;
-  }, []);
+  }, [user]);
 
   // Update chat title
   const updateChatTitle = useCallback(async (chatId: string, title: string) => {
@@ -146,10 +162,16 @@ export function useChats() {
     [fetchMessages]
   );
 
-  // Initial fetch
+  // Fetch chats when user changes
   useEffect(() => {
-    fetchChats();
-  }, [fetchChats]);
+    if (user) {
+      fetchChats();
+    } else {
+      setChats([]);
+      setCurrentChat(null);
+      setMessages([]);
+    }
+  }, [user, fetchChats]);
 
   // Real-time subscription for messages
   useEffect(() => {

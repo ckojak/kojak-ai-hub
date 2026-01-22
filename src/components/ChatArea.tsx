@@ -1,216 +1,169 @@
-import { useState, useRef, useEffect } from "react";
+import { useRef, useEffect } from "react";
 import { ChatMessage, Message } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
-import { Sparkles } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
+import { TypingIndicator } from "./TypingIndicator";
+import { Sparkles, Code2, Camera, Play, MessageCircle } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface ChatAreaProps {
-  mode: string;
+  messages: Message[];
+  isLoading: boolean;
+  activeMode: string;
+  onModeChange: (mode: string) => void;
+  onSendMessage: (content: string, mode: string) => void;
+  voiceTranscript?: string;
+  isListening?: boolean;
+  isSpeaking?: boolean;
+  onStartListening?: () => void;
+  onStopListening?: () => void;
+  onSpeak?: (text: string) => void;
+  onStopSpeaking?: () => void;
 }
 
-const modeInfo: Record<string, { title: string; description: string; function: string }> = {
-  code: {
-    title: "Kojak Code",
-    description: "Crie aplicativos, scripts e código em qualquer linguagem de programação.",
-    function: "kojak-code",
-  },
-  vision: {
-    title: "Kojak Vision",
-    description: "Gere imagens profissionais e criativas com inteligência artificial.",
-    function: "kojak-vision",
-  },
-  motion: {
-    title: "Kojak Motion",
-    description: "Produza vídeos em alta definição com IA generativa.",
-    function: "kojak-motion",
-  },
+const modeInfo = {
+  chat: { icon: MessageCircle, label: "Conversa Livre", color: "text-emerald-400", description: "Converse livremente sobre qualquer assunto" },
+  code: { icon: Code2, label: "Kojak Code", color: "text-blue-400", description: "Crie aplicativos e código profissional" },
+  vision: { icon: Camera, label: "Kojak Vision", color: "text-amber-400", description: "Gere imagens profissionais com IA" },
+  motion: { icon: Play, label: "Kojak Motion", color: "text-rose-400", description: "Crie vídeos em alta definição" },
 };
 
-export function ChatArea({ mode }: ChatAreaProps) {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [activeMode, setActiveMode] = useState(mode);
-  const chatEndRef = useRef<HTMLDivElement>(null);
-  const { toast } = useToast();
+const suggestions: Record<string, string[]> = {
+  chat: [
+    "Me explique como funciona a IA",
+    "Quais são as tendências de tecnologia?",
+    "Dicas para produtividade no trabalho",
+  ],
+  code: [
+    "Crie uma API REST em Node.js com Express",
+    "Faça um componente React de formulário de login",
+    "Escreva um script Python para web scraping",
+  ],
+  vision: [
+    "Logo minimalista para startup de tecnologia",
+    "Ilustração futurista de cidade cyberpunk",
+    "Banner profissional para rede social",
+  ],
+  motion: [
+    "Ondas do mar ao pôr do sol em câmera lenta",
+    "Animação abstrata com partículas coloridas",
+    "Paisagem de montanhas com nuvens passando",
+  ],
+};
 
-  useEffect(() => {
-    setActiveMode(mode);
-  }, [mode]);
+function EmptyState({ mode, onSuggestionClick }: { mode: string; onSuggestionClick: (text: string) => void }) {
+  const info = modeInfo[mode as keyof typeof modeInfo] || modeInfo.chat;
+  const Icon = info.icon;
+  const modeSuggestions = suggestions[mode] || suggestions.chat;
 
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  return (
+    <div className="flex-1 flex items-center justify-center p-6">
+      <div className="text-center max-w-md animate-fade-in">
+        {/* Logo */}
+        <div className="relative w-20 h-20 mx-auto mb-6">
+          <div className="absolute inset-0 bg-gradient-purple rounded-2xl blur-xl opacity-50 animate-pulse-slow" />
+          <div className="relative w-full h-full rounded-2xl bg-gradient-purple flex items-center justify-center glow-purple-lg">
+            <Sparkles className="w-10 h-10 text-white" />
+          </div>
+        </div>
 
-  const sendMessage = async (content: string, selectedMode: string) => {
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: "user",
-      content,
-      type: "text",
-      timestamp: new Date(),
-    };
+        <h2 className="text-2xl font-bold text-gradient-purple mb-2">
+          Kojak AI
+        </h2>
+        <p className="text-muted-foreground mb-6">
+          Plataforma Multimodal de Inteligência Artificial
+        </p>
 
-    setMessages((prev) => [...prev, userMessage]);
-    setIsLoading(true);
+        {/* Current Mode */}
+        <div className="glass-card rounded-2xl p-4 mb-6 neon-border">
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <Icon className={cn("w-5 h-5", info.color)} />
+            <span className="font-semibold">{info.label}</span>
+          </div>
+          <p className="text-sm text-muted-foreground">{info.description}</p>
+        </div>
 
-    try {
-      const modeConfig = modeInfo[selectedMode] || modeInfo.code;
-      
-      const { data, error } = await supabase.functions.invoke(modeConfig.function, {
-        body: { prompt: content },
-      });
+        {/* Suggestions */}
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground mb-3">Experimente perguntar:</p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {modeSuggestions.map((text, index) => (
+              <button
+                key={index}
+                onClick={() => onSuggestionClick(text)}
+                className="px-3 py-1.5 rounded-full glass-card text-xs text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all"
+              >
+                {text}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-      if (error) {
-        throw new Error(error.message || "Erro ao processar requisição");
-      }
+export function ChatArea({
+  messages,
+  isLoading,
+  activeMode,
+  onModeChange,
+  onSendMessage,
+  voiceTranscript,
+  isListening,
+  isSpeaking,
+  onStartListening,
+  onStopListening,
+  onSpeak,
+  onStopSpeaking,
+}: ChatAreaProps) {
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-      if (data.error) {
-        if (data.requiresSetup) {
-          toast({
-            title: "Configuração necessária",
-            description: data.error,
-            variant: "destructive",
-          });
-        } else {
-          throw new Error(data.error);
-        }
-        return;
-      }
-
-      const assistantMessage: Message = {
-        id: data.id || (Date.now() + 1).toString(),
-        role: "assistant",
-        content: data.content,
-        type: data.type || "text",
-        language: data.language,
-        mediaUrl: data.mediaUrl,
-        timestamp: new Date(data.timestamp || Date.now()),
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-    } catch (error) {
-      console.error("Erro ao enviar mensagem:", error);
-      
-      const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
-      
-      toast({
-        title: "Erro",
-        description: errorMessage,
-        variant: "destructive",
-      });
-
-      // Add error message to chat
-      const errorAssistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: `Desculpe, ocorreu um erro: ${errorMessage}. Por favor, tente novamente.`,
-        type: "text",
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorAssistantMessage]);
-    } finally {
-      setIsLoading(false);
-    }
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const handleSuggestionClick = (suggestion: string) => {
-    sendMessage(suggestion, activeMode);
-  };
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, isLoading]);
 
-  const currentModeInfo = modeInfo[activeMode] || modeInfo.code;
+  const handleSuggestionClick = (text: string) => {
+    onSendMessage(text, activeMode);
+  };
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      <header className="sticky top-0 z-10 px-6 py-4 bg-background/80 backdrop-blur-lg border-b border-kojak-border">
-        <h1 className="text-xl font-semibold text-foreground">{currentModeInfo.title}</h1>
-        <p className="text-sm text-muted-foreground">{currentModeInfo.description}</p>
-      </header>
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto chat-scrollbar px-6 py-6">
-        {messages.length === 0 ? (
-          <EmptyState mode={activeMode} onSuggestionClick={handleSuggestionClick} />
-        ) : (
+      {/* Messages Area */}
+      {messages.length === 0 ? (
+        <EmptyState mode={activeMode} onSuggestionClick={handleSuggestionClick} />
+      ) : (
+        <div className="flex-1 overflow-y-auto chat-scrollbar px-4 py-6">
           <div className="max-w-3xl mx-auto space-y-6">
             {messages.map((message) => (
-              <ChatMessage key={message.id} message={message} />
+              <ChatMessage
+                key={message.id}
+                message={message}
+                onSpeak={onSpeak}
+              />
             ))}
-            {isLoading && <LoadingIndicator />}
-            <div ref={chatEndRef} />
+            {isLoading && <TypingIndicator />}
+            <div ref={messagesEndRef} />
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Input */}
       <ChatInput
-        onSend={sendMessage}
+        onSend={onSendMessage}
         isLoading={isLoading}
         activeMode={activeMode}
-        onModeChange={setActiveMode}
+        onModeChange={onModeChange}
+        voiceTranscript={voiceTranscript}
+        isListening={isListening}
+        isSpeaking={isSpeaking}
+        onStartListening={onStartListening}
+        onStopListening={onStopListening}
+        onStopSpeaking={onStopSpeaking}
       />
-    </div>
-  );
-}
-
-function EmptyState({ mode, onSuggestionClick }: { mode: string; onSuggestionClick: (suggestion: string) => void }) {
-  const suggestions: Record<string, string[]> = {
-    code: [
-      "Crie uma API REST em Node.js com Express",
-      "Faça um componente React de formulário de login",
-      "Escreva um script Python para web scraping",
-    ],
-    vision: [
-      "Logo minimalista para startup de tecnologia",
-      "Ilustração futurista de cidade cyberpunk",
-      "Banner profissional para rede social",
-    ],
-    motion: [
-      "Ondas do mar ao pôr do sol em câmera lenta",
-      "Animação abstrata com partículas coloridas",
-      "Paisagem de montanhas com nuvens passando",
-    ],
-  };
-
-  return (
-    <div className="max-w-2xl mx-auto text-center py-16 animate-fade-in">
-      <div className="inline-flex p-4 rounded-2xl bg-gradient-purple glow-purple-lg mb-6 animate-float">
-        <Sparkles className="w-8 h-8 text-primary-foreground" />
-      </div>
-      <h2 className="text-2xl font-bold text-foreground mb-3">
-        Como posso ajudar você hoje?
-      </h2>
-      <p className="text-muted-foreground mb-8">
-        Comece uma conversa ou escolha uma sugestão abaixo
-      </p>
-      <div className="flex flex-wrap justify-center gap-3">
-        {(suggestions[mode] || suggestions.code).map((suggestion, index) => (
-          <button
-            key={index}
-            onClick={() => onSuggestionClick(suggestion)}
-            className="px-4 py-2 rounded-full bg-kojak-surface border border-kojak-border text-sm text-foreground hover:border-primary/50 hover:bg-kojak-charcoal transition-all duration-200"
-          >
-            {suggestion}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function LoadingIndicator() {
-  return (
-    <div className="flex items-center gap-3 animate-fade-in">
-      <div className="w-8 h-8 rounded-lg bg-gradient-purple flex items-center justify-center">
-        <span className="text-xs font-semibold text-primary-foreground">K</span>
-      </div>
-      <div className="flex gap-1">
-        <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: "0ms" }} />
-        <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: "150ms" }} />
-        <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: "300ms" }} />
-      </div>
-      <span className="text-sm text-muted-foreground">Processando...</span>
     </div>
   );
 }

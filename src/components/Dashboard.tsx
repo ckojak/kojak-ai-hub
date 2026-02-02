@@ -37,7 +37,7 @@ export function Dashboard() {
             Crie o Impossível com <br />
             {/* Gradiente de texto complexo para efeito neon */}
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-400 via-blue-500 to-cyan-400 drop-shadow-[0_0_15px_rgba(139,92,246,0.3)]">
-              Kojak AI
+              Kojak IA
             </span>
           </h1>
           <p className="text-lg text-blue-200/70 max-w-xl mx-auto leading-relaxed">

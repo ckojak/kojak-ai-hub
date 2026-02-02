@@ -10,7 +10,7 @@ interface ChatAreaProps {
   isLoading: boolean;
   activeMode: string;
   onModeChange: (mode: string) => void;
-  onSendMessage: (content: string, mode: string) => void;
+  onSendMessage: (content: string, mode: string, imageUrl?: string) => void;
   voiceTranscript?: string;
   isListening?: boolean;
   isSpeaking?: boolean;
@@ -67,7 +67,7 @@ function EmptyState({ mode, onSuggestionClick }: { mode: string; onSuggestionCli
         </div>
 
         <h2 className="text-2xl font-bold text-gradient-purple mb-2">
-          Kojak AI
+          Kojak IA
         </h2>
         <p className="text-muted-foreground mb-6">
           Plataforma Multimodal de Inteligência Artificial

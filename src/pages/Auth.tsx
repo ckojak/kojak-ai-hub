@@ -68,7 +68,7 @@ export default function Auth() {
           <div className="inline-flex p-4 rounded-2xl bg-gradient-purple glow-purple-lg mb-4">
             <Sparkles className="w-10 h-10 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-gradient-purple">Kojak AI</h1>
+          <h1 className="text-3xl font-bold text-gradient-purple">Kojak IA</h1>
           <p className="text-muted-foreground mt-2">
             Plataforma Multimodal de Inteligência Artificial
           </p>

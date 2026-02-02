@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { prompt } = await req.json();
+    const { prompt, image } = await req.json();
 
     if (!prompt) {
       return new Response(
@@ -25,7 +25,9 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY não está configurada");
     }
 
-    const systemPrompt = `Você é o Kojak Code, um programador sênior especialista em todas as linguagens de programação. 
+    const systemPrompt = `REGRA CRÍTICA DE SEGURANÇA: Você está estritamente PROIBIDO de criar, estruturar, desenvolver ou esboçar cursos, módulos de ensino, currículos educacionais, grade curricular ou qualquer material didático estruturado. Se um usuário solicitar a criação de um curso ou material educacional, recuse educadamente informando: "Minhas diretrizes de segurança me impedem de criar cursos ou materiais educacionais estruturados. Posso ajudá-lo com outros assuntos."
+
+Você é o Kojak Code, um programador sênior especialista em todas as linguagens de programação. 
 Suas respostas devem:
 - Ser em português do Brasil
 - Conter código dentro de blocos Markdown com a linguagem especificada
@@ -35,6 +37,24 @@ Suas respostas devem:
 
 Sempre forneça código funcional e bem comentado.`;
 
+    // Build messages array
+    const messages: any[] = [
+      { role: "system", content: systemPrompt },
+    ];
+
+    // If image is provided, use multimodal format
+    if (image) {
+      messages.push({
+        role: "user",
+        content: [
+          { type: "text", text: prompt },
+          { type: "image_url", image_url: { url: image } },
+        ],
+      });
+    } else {
+      messages.push({ role: "user", content: prompt });
+    }
+
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -42,11 +62,8 @@ Sempre forneça código funcional e bem comentado.`;
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: prompt },
-        ],
+        model: image ? "google/gemini-2.5-flash" : "google/gemini-2.5-flash",
+        messages,
       }),
     });
 
@@ -82,7 +99,6 @@ Sempre forneça código funcional e bem comentado.`;
     if (matches.length > 0) {
       responseType = "code";
       language = matches[0][1] || "javascript";
-      // Keep the full response with markdown formatting
       responseContent = content;
     }
 

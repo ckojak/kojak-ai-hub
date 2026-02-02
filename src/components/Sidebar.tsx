@@ -50,7 +50,7 @@ export function Sidebar({
         </div>
         {!collapsed && (
           <div className="flex flex-col">
-            <span className="text-lg font-bold text-gradient-purple">Kojak AI</span>
+            <span className="text-lg font-bold text-gradient-purple">Kojak IA</span>
             <span className="text-[10px] text-muted-foreground">Multimodal Platform</span>
           </div>
         )}

@@ -64,7 +64,7 @@ const Index = () => {
     });
   }, [user]);
 
-  const handleSendMessage = useCallback(async (content: string, mode: string) => {
+  const handleSendMessage = useCallback(async (content: string, mode: string, imageUrl?: string) => {
     if (!content.trim()) return;
 
     let chatId = currentChat?.id;
@@ -114,7 +114,7 @@ const Index = () => {
         : content;
       
       const { data, error } = await supabase.functions.invoke(config.function, {
-        body: { prompt: promptWithContext },
+        body: { prompt: promptWithContext, image: imageUrl },
       });
 
       if (error) {

@@ -1,9 +1,11 @@
-import { useState, useEffect } from "react";
-import { Send, Code2, Camera, Play, MessageCircle, Loader2, Mic, MicOff, Volume2, VolumeX } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Send, Code2, Camera, Play, MessageCircle, Loader2, Mic, MicOff, Volume2, VolumeX, Paperclip, X, Image as ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface ChatInputProps {
-  onSend: (message: string, mode: string) => void;
+  onSend: (message: string, mode: string, imageUrl?: string) => void;
   isLoading?: boolean;
   activeMode: string;
   onModeChange: (mode: string) => void;
@@ -35,6 +37,11 @@ export function ChatInput({
   onStopSpeaking,
 }: ChatInputProps) {
   const [message, setMessage] = useState("");
+  const [attachedImage, setAttachedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
 
   // Update message when voice transcript changes
   useEffect(() => {
@@ -43,12 +50,101 @@ export function ChatInput({
     }
   }, [voiceTranscript]);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (message.trim() && !isLoading) {
-      onSend(message.trim(), activeMode);
-      setMessage("");
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      toast({
+        title: "Arquivo inválido",
+        description: "Por favor, selecione uma imagem.",
+        variant: "destructive",
+      });
+      return;
     }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "Arquivo muito grande",
+        description: "O tamanho máximo é 5MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setAttachedImage(file);
+    
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setImagePreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeImage = () => {
+    setAttachedImage(null);
+    setImagePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const uploadImage = async (file: File): Promise<string | null> => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      // Create unique filename
+      const fileExt = file.name.split(".").pop();
+      const fileName = `${user?.id || "anonymous"}/${Date.now()}.${fileExt}`;
+
+      const { data, error } = await supabase.storage
+        .from("chat-attachments")
+        .upload(fileName, file);
+
+      if (error) {
+        console.error("Upload error:", error);
+        throw error;
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from("chat-attachments")
+        .getPublicUrl(data.path);
+
+      return publicUrl;
+    } catch (error) {
+      console.error("Failed to upload image:", error);
+      toast({
+        title: "Erro no upload",
+        description: "Não foi possível enviar a imagem. Tente novamente.",
+        variant: "destructive",
+      });
+      return null;
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if ((!message.trim() && !attachedImage) || isLoading || isUploading) return;
+
+    let imageUrl: string | undefined;
+
+    // Upload image if attached
+    if (attachedImage) {
+      setIsUploading(true);
+      const uploadedUrl = await uploadImage(attachedImage);
+      setIsUploading(false);
+
+      if (!uploadedUrl) return; // Upload failed
+      imageUrl = uploadedUrl;
+    }
+
+    onSend(message.trim(), activeMode, imageUrl);
+    setMessage("");
+    removeImage();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -74,6 +170,26 @@ export function ChatInput({
         onSubmit={handleSubmit}
         className="max-w-3xl mx-auto glass-card-strong rounded-2xl transition-all duration-300 hover:border-primary/30 neon-border"
       >
+        {/* Image Preview */}
+        {imagePreview && (
+          <div className="p-3 border-b border-white/10">
+            <div className="relative inline-block">
+              <img 
+                src={imagePreview} 
+                alt="Preview" 
+                className="h-20 w-auto rounded-lg object-cover"
+              />
+              <button
+                type="button"
+                onClick={removeImage}
+                className="absolute -top-2 -right-2 w-6 h-6 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center hover:scale-110 transition-transform"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Mode Selector - Hidden on mobile (uses bottom bar) */}
         <div className="hidden md:flex items-center gap-1 px-4 pt-3 pb-2 border-b border-white/10">
           <span className="text-xs text-muted-foreground mr-2">Modo:</span>
@@ -100,6 +216,28 @@ export function ChatInput({
 
         {/* Input Area */}
         <div className="flex items-end gap-3 p-3">
+          {/* Attach Image Button */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleImageSelect}
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isLoading || isUploading}
+            className={cn(
+              "flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-200",
+              attachedImage
+                ? "bg-primary/20 text-primary border border-primary/30"
+                : "bg-white/5 text-muted-foreground hover:bg-white/10 hover:text-foreground"
+            )}
+          >
+            {attachedImage ? <ImageIcon className="w-5 h-5" /> : <Paperclip className="w-5 h-5" />}
+          </button>
+
           {/* Voice Button */}
           <button
             type="button"
@@ -123,7 +261,7 @@ export function ChatInput({
             placeholder={`Mensagem para Kojak ${currentMode.label}...`}
             className="flex-1 min-h-[44px] max-h-32 bg-transparent text-foreground placeholder:text-muted-foreground resize-none focus:outline-none text-sm leading-relaxed"
             rows={1}
-            disabled={isLoading}
+            disabled={isLoading || isUploading}
           />
 
           {/* Speaking Indicator / Stop Button */}
@@ -140,15 +278,15 @@ export function ChatInput({
           {/* Send Button */}
           <button
             type="submit"
-            disabled={!message.trim() || isLoading}
+            disabled={(!message.trim() && !attachedImage) || isLoading || isUploading}
             className={cn(
               "flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-200",
-              message.trim() && !isLoading
+              (message.trim() || attachedImage) && !isLoading && !isUploading
                 ? "bg-gradient-purple text-primary-foreground glow-purple hover:scale-105"
                 : "bg-white/5 text-muted-foreground cursor-not-allowed"
             )}
           >
-            {isLoading ? (
+            {isLoading || isUploading ? (
               <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
               <Send className="w-5 h-5" />

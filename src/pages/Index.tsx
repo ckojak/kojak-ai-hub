@@ -33,7 +33,7 @@ const Index = () => {
 
   const messages = user && currentChat ? dbMessages : localMessages;
 
-  // GATILHO DE VOZ AUTOMÁTICA
+  // <--- INJEÇÃO DE VOZ AUTOMÁTICA (SÓ ISSO MUDOU) --->
   useEffect(() => {
     const lastMessage = messages[messages.length - 1];
     if (lastMessage && lastMessage.role === "assistant" && lastMessage.type === "text" && !isSpeaking && !isLoading) {
@@ -49,15 +49,6 @@ const Index = () => {
     await supabase.from("activity_log").insert({ user_id: user.id, action, details });
   }, [user]);
 
-  // FUNÇÃO QUE ESTAVA FALTANDO E CAUSOU A TELA PRETA
-  const handleNewChat = useCallback(async () => {
-    if (user) {
-      await createChat(activeMode);
-    }
-    setLocalMessages([]);
-    setReferenceImage(null);
-  }, [user, createChat, activeMode]);
-
   const handleSendMessage = useCallback(async (content: string, mode: string, imageUrl?: string) => {
     if (!content.trim() && !imageUrl && !referenceImage) return;
 
@@ -72,15 +63,16 @@ const Index = () => {
         }
         chatId = newChat.id;
       }
-      await addMessage("user", content, (imageUrl || referenceImage) ? "image" : "text", imageUrl);
+      await addMessage("user", content, imageUrl ? "image" : "text", imageUrl);
+      await logActivity(`Mensagem enviada no modo ${mode}`, { preview: content.slice(0, 100) });
     } else {
       const userMessage: Message = {
         id: Date.now().toString(),
         chat_id: "local",
         role: "user",
         content,
-        type: (imageUrl || referenceImage) ? "image" : "text",
-        media_url: imageUrl || undefined,
+        type: imageUrl ? "image" : "text",
+        media_url: imageUrl,
         created_at: new Date().toISOString(),
       };
       setLocalMessages(prev => [...prev, userMessage]);
@@ -91,25 +83,25 @@ const Index = () => {
     try {
       const config = modeConfig[mode] || modeConfig.chat;
       const personalContext = profile?.personal_context || "";
-      const promptWithContext = personalContext ? `[Contexto: ${personalContext}]\n\n${content}` : content;
+      const promptWithContext = personalContext ? `[Contexto do usuário: ${personalContext}]\n\n${content}` : content;
       
       const { data, error } = await supabase.functions.invoke(config.function, {
         body: { 
           prompt: promptWithContext, 
-          image: imageUrl, 
+          image: imageUrl,                
           reference_image: referenceImage 
         },
       });
 
       setReferenceImage(null);
 
-      if (error) throw new Error(error.message || "Erro na Edge Function");
+      if (error) throw new Error(error.message || "Erro ao processar requisição");
       if (data.error) throw new Error(data.error);
 
       if (user && chatId) {
         await addMessage("assistant", data.content, data.type || "text", data.mediaUrl);
         if (dbMessages.length === 0) {
-          const title = content ? content.slice(0, 40) : "Nova Mídia";
+          const title = content ? (content.slice(0, 50) + (content.length > 50 ? "..." : "")) : "Imagem Enviada";
           await updateChatTitle(chatId, title);
         }
       } else {
@@ -125,41 +117,61 @@ const Index = () => {
         setLocalMessages(prev => [...prev, assistantMessage]);
       }
     } catch (error: any) {
-      toast({ title: "Erro", description: error.message, variant: "destructive" });
+      console.error("Erro ao enviar mensagem:", error);
+      const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
+      toast({ title: "Erro", description: errorMessage, variant: "destructive" });
+
+      const errorAssistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        chat_id: chatId || "local",
+        role: "assistant",
+        content: `Desculpe, ocorreu um erro: ${errorMessage}. Por favor, tente novamente.`,
+        type: "text",
+        created_at: new Date().toISOString(),
+      };
+
+      if (user && chatId) {
+        await addMessage("assistant", errorAssistantMessage.content, "text");
+      } else {
+        setLocalMessages(prev => [...prev, errorAssistantMessage]);
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [user, currentChat, createChat, addMessage, updateChatTitle, dbMessages, profile, toast, referenceImage]);
+  }, [user, currentChat, createChat, addMessage, updateChatTitle, dbMessages, profile, toast, logActivity, referenceImage]);
 
-  if (authLoading) return <div className="h-screen bg-background flex items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>;
+  const handleNewChat = useCallback(async () => {
+    if (user) await createChat(activeMode);
+    setLocalMessages([]);
+  }, [user, createChat, activeMode]);
+
+  const handleModeChange = useCallback((mode: string) => {
+    setActiveMode(mode);
+  }, []);
+
+  if (authLoading) {
+    return (
+      <div className="h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
-      <Sidebar 
-        chats={chats} 
-        currentChatId={currentChat?.id} 
-        onSelectChat={selectChat} 
-        onNewChat={handleNewChat} 
-        onDeleteChat={deleteChat} 
-        onOpenSettings={() => setSettingsOpen(true)} 
-      />
-      <MobileHistorySheet 
-        open={historyOpen} 
-        onOpenChange={setHistoryOpen} 
-        chats={chats} 
-        currentChatId={currentChat?.id} 
-        onSelectChat={selectChat} 
-        onNewChat={handleNewChat} 
-        onDeleteChat={deleteChat} 
-      />
+      <Sidebar chats={chats} currentChatId={currentChat?.id} onSelectChat={selectChat} onNewChat={handleNewChat} onDeleteChat={deleteChat} onOpenSettings={() => setSettingsOpen(true)} />
+      <MobileHistorySheet open={historyOpen} onOpenChange={setHistoryOpen} chats={chats} currentChatId={currentChat?.id} onSelectChat={selectChat} onNewChat={handleNewChat} onDeleteChat={deleteChat} />
       <SettingsPanel open={settingsOpen} onOpenChange={setSettingsOpen} />
-      
+
       <main className="flex-1 relative overflow-hidden md:ml-72 transition-all duration-300">
         <ChatArea
           messages={messages}
           isLoading={isLoading}
           activeMode={activeMode}
-          onModeChange={setActiveMode}
+          onModeChange={handleModeChange}
           onSendMessage={handleSendMessage}
           voiceTranscript={transcript}
           isListening={isListening}
@@ -173,13 +185,8 @@ const Index = () => {
           onClearReference={() => setReferenceImage(null)}
         />
       </main>
-      
-      <BottomBar 
-        activeMode={activeMode} 
-        onModeChange={setActiveMode} 
-        onOpenHistory={() => setHistoryOpen(true)} 
-        onOpenSettings={() => setSettingsOpen(true)} 
-      />
+
+      <BottomBar activeMode={activeMode} onModeChange={handleModeChange} onOpenHistory={() => setHistoryOpen(true)} onOpenSettings={() => setSettingsOpen(true)} />
     </div>
   );
 };

@@ -1,71 +1,5 @@
-import { useState, useCallback, useEffect } from "react";
-import { Sidebar } from "@/components/Sidebar";
-import { ChatArea } from "@/components/ChatArea";
-import { BottomBar } from "@/components/BottomBar";
-import { MobileHistorySheet } from "@/components/MobileHistorySheet";
-import { SettingsPanel } from "@/components/SettingsPanel";
-import { useChats, Message } from "@/hooks/useChats";
-import { useVoice } from "@/hooks/useVoice";
-import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
-
-const modeConfig: Record<string, { function: string }> = {
-  chat: { function: "kojak-code" },
-  code: { function: "kojak-code" },
-  vision: { function: "kojak-vision" },
-  motion: { function: "kojak-motion" },
-};
-
-const Index = () => {
-  const [activeMode, setActiveMode] = useState("chat");
-  const [isLoading, setIsLoading] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [localMessages, setLocalMessages] = useState<Message[]>([]);
-  
-  const { user, loading: authLoading, profile } = useAuth();
-  
-  const {
-    chats,
-    currentChat,
-    messages: dbMessages,
-    createChat,
-    selectChat,
-    deleteChat,
-    addMessage,
-    updateChatTitle,
-  } = useChats();
-
-  const {
-    isListening,
-    isSpeaking,
-    transcript,
-    startListening,
-    stopListening,
-    speak,
-    stopSpeaking,
-  } = useVoice();
-
-  const { toast } = useToast();
-
-  // Use DB messages if authenticated and has a chat, otherwise use local
-  const messages = user && currentChat ? dbMessages : localMessages;
-
-  // Log activity when sending messages
-  const logActivity = useCallback(async (action: string, details?: any) => {
-    if (!user) return;
-    
-    await supabase.from("activity_log").insert({
-      user_id: user.id,
-      action,
-      details,
-    });
-  }, [user]);
-
   const handleSendMessage = useCallback(async (content: string, mode: string, imageUrl?: string) => {
-    if (!content.trim()) return;
+    if (!content.trim() && !imageUrl) return; // Permite envio se tiver apenas imagem
 
     let chatId = currentChat?.id;
 
@@ -84,19 +18,20 @@ const Index = () => {
         chatId = newChat.id;
       }
 
-      // Add user message to DB
-      await addMessage("user", content, "text");
+      // Add user message to DB (AGORA INCLUI A IMAGEM SE HOUVER)
+      await addMessage("user", content, imageUrl ? "image" : "text", imageUrl);
       
       // Log activity
       await logActivity(`Mensagem enviada no modo ${mode}`, { preview: content.slice(0, 100) });
     } else {
-      // Add to local state for non-authenticated users
+      // Add to local state for non-authenticated users (AGORA INCLUI A IMAGEM SE HOUVER)
       const userMessage: Message = {
         id: Date.now().toString(),
         chat_id: "local",
         role: "user",
         content,
-        type: "text",
+        type: imageUrl ? "image" : "text",
+        media_url: imageUrl,
         created_at: new Date().toISOString(),
       };
       setLocalMessages(prev => [...prev, userMessage]);
@@ -113,6 +48,7 @@ const Index = () => {
         ? `[Contexto do usuário: ${personalContext}]\n\n${content}`
         : content;
       
+      // ENVIA PARA A IA (O parâmetro image já estava aqui, o erro era que a mensagem local não tinha a imagem)
       const { data, error } = await supabase.functions.invoke(config.function, {
         body: { prompt: promptWithContext, image: imageUrl },
       });
@@ -136,7 +72,7 @@ const Index = () => {
 
         // Update chat title based on first message
         if (dbMessages.length === 0) {
-          const title = content.slice(0, 50) + (content.length > 50 ? "..." : "");
+          const title = content ? (content.slice(0, 50) + (content.length > 50 ? "..." : "")) : "Imagem Enviada";
           await updateChatTitle(chatId, title);
         }
       } else {
@@ -182,86 +118,3 @@ const Index = () => {
       setIsLoading(false);
     }
   }, [user, currentChat, createChat, addMessage, updateChatTitle, dbMessages, profile, toast, logActivity]);
-
-  const handleNewChat = useCallback(async () => {
-    if (user) {
-      await createChat(activeMode);
-    }
-    setLocalMessages([]);
-  }, [user, createChat, activeMode]);
-
-  const handleModeChange = useCallback((mode: string) => {
-    setActiveMode(mode);
-  }, []);
-
-  // Show loading while auth is checking
-  if (authLoading) {
-    return (
-      <div className="h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-muted-foreground">Carregando...</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="h-screen bg-background flex flex-col overflow-hidden">
-      {/* Desktop Sidebar */}
-      <Sidebar
-        chats={chats}
-        currentChatId={currentChat?.id}
-        onSelectChat={selectChat}
-        onNewChat={handleNewChat}
-        onDeleteChat={deleteChat}
-        onOpenSettings={() => setSettingsOpen(true)}
-      />
-
-      {/* Mobile History Sheet */}
-      <MobileHistorySheet
-        open={historyOpen}
-        onOpenChange={setHistoryOpen}
-        chats={chats}
-        currentChatId={currentChat?.id}
-        onSelectChat={selectChat}
-        onNewChat={handleNewChat}
-        onDeleteChat={deleteChat}
-      />
-
-      {/* Settings Panel */}
-      <SettingsPanel
-        open={settingsOpen}
-        onOpenChange={setSettingsOpen}
-      />
-
-      {/* Main Content */}
-      <main className="flex-1 relative overflow-hidden md:ml-72 transition-all duration-300">
-        <ChatArea
-          messages={messages}
-          isLoading={isLoading}
-          activeMode={activeMode}
-          onModeChange={handleModeChange}
-          onSendMessage={handleSendMessage}
-          voiceTranscript={transcript}
-          isListening={isListening}
-          isSpeaking={isSpeaking}
-          onStartListening={startListening}
-          onStopListening={stopListening}
-          onSpeak={speak}
-          onStopSpeaking={stopSpeaking}
-        />
-      </main>
-
-      {/* Mobile Bottom Bar */}
-      <BottomBar
-        activeMode={activeMode}
-        onModeChange={handleModeChange}
-        onOpenHistory={() => setHistoryOpen(true)}
-        onOpenSettings={() => setSettingsOpen(true)}
-      />
-    </div>
-  );
-};
-
-export default Index;

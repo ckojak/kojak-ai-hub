@@ -18,6 +18,10 @@ interface ChatAreaProps {
   onStopListening?: () => void;
   onSpeak?: (text: string) => void;
   onStopSpeaking?: () => void;
+  // <--- VIGAS DA PONTE ADICIONADAS --->
+  referenceImage?: string | null;
+  onSelectReference?: (url: string) => void;
+  onClearReference?: () => void;
 }
 
 const modeInfo = {
@@ -58,7 +62,6 @@ function EmptyState({ mode, onSuggestionClick }: { mode: string; onSuggestionCli
   return (
     <div className="flex-1 flex items-center justify-center p-6">
       <div className="text-center max-w-md animate-fade-in">
-        {/* Logo */}
         <div className="relative w-20 h-20 mx-auto mb-6">
           <div className="absolute inset-0 bg-gradient-purple rounded-2xl blur-xl opacity-50 animate-pulse-slow" />
           <div className="relative w-full h-full rounded-2xl bg-gradient-purple flex items-center justify-center glow-purple-lg">
@@ -73,7 +76,6 @@ function EmptyState({ mode, onSuggestionClick }: { mode: string; onSuggestionCli
           Plataforma Multimodal de Inteligência Artificial
         </p>
 
-        {/* Current Mode */}
         <div className="glass-card rounded-2xl p-4 mb-6 neon-border">
           <div className="flex items-center justify-center gap-2 mb-2">
             <Icon className={cn("w-5 h-5", info.color)} />
@@ -82,7 +84,6 @@ function EmptyState({ mode, onSuggestionClick }: { mode: string; onSuggestionCli
           <p className="text-sm text-muted-foreground">{info.description}</p>
         </div>
 
-        {/* Suggestions */}
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground mb-3">Experimente perguntar:</p>
           <div className="flex flex-wrap justify-center gap-2">
@@ -115,6 +116,9 @@ export function ChatArea({
   onStopListening,
   onSpeak,
   onStopSpeaking,
+  referenceImage,
+  onSelectReference,
+  onClearReference,
 }: ChatAreaProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -132,7 +136,6 @@ export function ChatArea({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Messages Area */}
       {messages.length === 0 ? (
         <EmptyState mode={activeMode} onSuggestionClick={handleSuggestionClick} />
       ) : (
@@ -143,6 +146,7 @@ export function ChatArea({
                 key={message.id}
                 message={message}
                 onSpeak={onSpeak}
+                onSelectReference={onSelectReference} // <--- REPASSE PARA A MENSAGEM
               />
             ))}
             {isLoading && <TypingIndicator />}
@@ -151,7 +155,6 @@ export function ChatArea({
         </div>
       )}
 
-      {/* Input */}
       <ChatInput
         onSend={onSendMessage}
         isLoading={isLoading}
@@ -163,6 +166,8 @@ export function ChatArea({
         onStartListening={onStartListening}
         onStopListening={onStopListening}
         onStopSpeaking={onStopSpeaking}
+        referenceImage={referenceImage}     // <--- REPASSE PARA O VISOR DO INPUT
+        onClearReference={onClearReference} // <--- REPASSE PARA O VISOR DO INPUT
       />
     </div>
   );

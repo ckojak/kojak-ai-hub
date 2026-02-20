@@ -1,7 +1,9 @@
 import { Download, Copy, Check, User, Sparkles, Volume2, ImagePlus } from "lucide-react";
-import { useState } from "react";
+import { useState, useCallback, memo } from "react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeSanitize from "rehype-sanitize";
 
 export interface Message {
   id: string;
@@ -19,102 +21,167 @@ interface ChatMessageProps {
   onSelectReference?: (url: string) => void;
 }
 
-export function ChatMessage({ message, onSpeak, onSelectReference }: ChatMessageProps) {
+export const ChatMessage = memo(function ChatMessage({
+  message,
+  onSpeak,
+  onSelectReference,
+}: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
+
   const isUser = message.role === "user";
 
-  const handleCopy = async (text: string) => {
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleDownload = async (url: string, filename: string) => {
+  const handleCopy = useCallback(async (text: string) => {
     try {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const downloadUrl = URL.createObjectURL(blob);
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+
+      const timer = setTimeout(() => setCopied(false), 2000);
+
+      return () => clearTimeout(timer);
+    } catch (err) {
+      console.error("Copy failed:", err);
+    }
+  }, []);
+
+  const handleDownload = useCallback(async (url: string, filename: string) => {
+    let objectUrl: string | null = null;
+
+    try {
+      const res = await fetch(url);
+
+      if (!res.ok) throw new Error("Download failed");
+
+      const blob = await res.blob();
+
+      objectUrl = URL.createObjectURL(blob);
+
       const link = document.createElement("a");
-      link.href = downloadUrl;
+      link.href = objectUrl;
       link.download = filename;
+
       document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(downloadUrl);
-    } catch (error) {
-      console.error("Download failed:", error);
-    }
-  };
+      link.remove();
 
-  const formatTime = () => {
-    if (message.created_at) {
-      return new Date(message.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    } catch (err) {
+      console.error("Download error:", err);
+    } finally {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     }
-    return new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-  };
+  }, []);
 
-  // A CORREÇÃO ESTÁ AQUI: O conteúdo de texto agora é sempre renderizado
-  const shouldRenderText = message.content && message.content.trim().length > 0;
+  const formatTime = useCallback(() => {
+    const date = message.created_at
+      ? new Date(message.created_at)
+      : new Date();
+
+    return date.toLocaleTimeString("pt-BR", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }, [message.created_at]);
+
+  const shouldRenderText =
+    message.content && message.content.trim().length > 0;
 
   return (
-    <div className={cn("flex gap-3 animate-fade-in", isUser ? "flex-row-reverse" : "flex-row")}>
-      <div className={cn("flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center", isUser ? "bg-gradient-purple glow-purple" : "bg-gradient-to-br from-primary/40 to-secondary/30 border border-primary/30")}>
-        {isUser ? <User className="w-5 h-5 text-white" /> : <Sparkles className="w-5 h-5 text-primary" />}
+    <div
+      className={cn(
+        "flex gap-3 animate-fade-in",
+        isUser ? "flex-row-reverse" : "flex-row"
+      )}
+    >
+      <div
+        className={cn(
+          "flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center",
+          isUser
+            ? "bg-gradient-purple glow-purple"
+            : "bg-gradient-to-br from-primary/40 to-secondary/30 border border-primary/30"
+        )}
+      >
+        {isUser ? (
+          <User className="w-5 h-5 text-white" />
+        ) : (
+          <Sparkles className="w-5 h-5 text-primary" />
+        )}
       </div>
 
-      <div className={cn("max-w-[85%] md:max-w-[75%] rounded-2xl px-4 py-3", isUser ? "bubble-user text-white rounded-tr-sm" : "bubble-ai rounded-tl-sm")}>
-        
-        {/* Renderiza o texto SE ele existir, independente do tipo da mensagem */}
+      <div
+        className={cn(
+          "max-w-[85%] md:max-w-[75%] rounded-2xl px-4 py-3",
+          isUser
+            ? "bubble-user text-white rounded-tr-sm"
+            : "bubble-ai rounded-tl-sm"
+        )}
+      >
         {shouldRenderText && (
-          <div className={cn("text-sm leading-relaxed prose prose-sm max-w-none mb-2", isUser ? "prose-invert" : "prose-kojak")}>
-            <ReactMarkdown>{message.content}</ReactMarkdown>
+          <div
+            className={cn(
+              "text-sm leading-relaxed prose prose-sm max-w-none",
+              isUser ? "prose-invert" : "prose-kojak"
+            )}
+          >
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeSanitize]}
+            >
+              {message.content}
+            </ReactMarkdown>
           </div>
         )}
 
-        {/* Renderiza a imagem SE ela existir */}
         {message.type === "image" && message.media_url && (
-          <div className="relative group rounded-xl overflow-hidden">
-            <img src={message.media_url} alt="Imagem enviada" className="w-full max-w-md rounded-xl" />
-            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
-              {!isUser && (
-                <button onClick={() => handleDownload(message.media_url!, "kojak-image.png")} className="p-3 bg-white/20 text-white rounded-full hover:scale-110 transition-transform backdrop-blur-sm">
-                  <Download className="w-5 h-5" />
-                </button>
-              )}
-              
-              {!isUser && onSelectReference && (
-                <button 
-                  onClick={() => onSelectReference(message.media_url!)} 
-                  className="p-3 bg-gradient-purple text-white rounded-full hover:scale-110 transition-transform glow-purple"
-                  title="Usar como Alvo (Troca de Rosto)"
+          <div className="relative group rounded-xl overflow-hidden mt-2">
+            <img
+              src={message.media_url}
+              className="rounded-xl max-w-md"
+            />
+
+            {!isUser && (
+              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex gap-3 items-center justify-center transition">
+                <button
+                  onClick={() =>
+                    handleDownload(
+                      message.media_url!,
+                      "kojak-image.png"
+                    )
+                  }
                 >
-                  <ImagePlus className="w-5 h-5" />
+                  <Download />
                 </button>
-              )}
-            </div>
+
+                {onSelectReference && (
+                  <button
+                    onClick={() =>
+                      onSelectReference(message.media_url!)
+                    }
+                  >
+                    <ImagePlus />
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         )}
-        
-        {/* Ações para mensagens de texto da IA */}
-        {!isUser && message.type !== "image" && message.content.length > 0 && (
-            <div className="flex items-center gap-3 mt-3 pt-2 border-t border-white/10">
-                <button onClick={() => handleCopy(message.content)} className="flex items-center gap-1.5 text-[10px] uppercase font-medium text-muted-foreground hover:text-primary transition-colors">
-                    {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
-                    {copied ? "Copiado" : "Copiar"}
-                </button>
-                {onSpeak && (
-                    <button onClick={() => onSpeak(message.content)} className="flex items-center gap-1.5 text-[10px] uppercase font-medium text-muted-foreground hover:text-primary transition-colors">
-                        <Volume2 className="w-3.5 h-3.5" />
-                        Ouvir
-                    </button>
-                )}
-            </div>
+
+        {!isUser && shouldRenderText && (
+          <div className="flex gap-3 mt-3 pt-2 border-t border-white/10">
+            <button onClick={() => handleCopy(message.content)}>
+              {copied ? <Check /> : <Copy />}
+            </button>
+
+            {onSpeak && (
+              <button onClick={() => onSpeak(message.content)}>
+                <Volume2 />
+              </button>
+            )}
+          </div>
         )}
 
-        <div className={cn("mt-2 text-[10px] font-medium opacity-50", isUser ? "text-right" : "text-left")}>
+        <div className="text-xs opacity-50 mt-2">
           {formatTime()}
         </div>
       </div>
     </div>
   );
-}
+});

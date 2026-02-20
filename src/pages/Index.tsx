@@ -1,100 +1,100 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import {
+  useState,
+  useCallback,
+  useEffect,
+} from "react";
 
 import { ChatArea } from "@/components/ChatArea";
-import { Message } from "@/components/ChatMessage";
+
+import {
+  Message,
+} from "@/components/ChatMessage";
+
+import {
+  SendMessagePayload,
+} from "@/components/ChatInput";
 
 export default function Index() {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
 
-  const abortControllerRef =
-    useRef<AbortController | null>(null);
+  const [messages, setMessages] =
+    useState<Message[]>([]);
 
-  const speak = useCallback((text: string) => {
-    if (!text) return;
+  const [isLoading, setIsLoading] =
+    useState(false);
 
-    window.speechSynthesis.cancel();
+  const speak = useCallback(
+    (text: string) => {
 
-    const utterance =
-      new SpeechSynthesisUtterance(text);
+      speechSynthesis.cancel();
 
-    utterance.onstart = () =>
-      setIsSpeaking(true);
+      const u =
+        new SpeechSynthesisUtterance(text);
 
-    utterance.onend = () =>
-      setIsSpeaking(false);
+      speechSynthesis.speak(u);
 
-    utterance.onerror = () =>
-      setIsSpeaking(false);
-
-    window.speechSynthesis.speak(utterance);
-
-  }, []);
-
-  const stopSpeaking = useCallback(() => {
-    window.speechSynthesis.cancel();
-    setIsSpeaking(false);
-  }, []);
-
-  const sendMessage = useCallback(
-    async ({
-      content,
-      imageFile,
-    }: {
-      content?: string;
-      imageFile?: File | null;
-    }) => {
-      if (!content && !imageFile) return;
-
-      setIsLoading(true);
-
-      const userMessage: Message = {
-        id: crypto.randomUUID(),
-        role: "user",
-        content: content || "",
-        type: imageFile ? "image" : "text",
-        media_url: imageFile
-          ? URL.createObjectURL(imageFile)
-          : undefined,
-      };
-
-      setMessages((prev) => [
-        ...prev,
-        userMessage,
-      ]);
-
-      try {
-        abortControllerRef.current =
-          new AbortController();
-
-        await new Promise((resolve) =>
-          setTimeout(resolve, 1000)
-        );
-
-        const aiMessage: Message = {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content:
-            "Resposta profissional simulada.",
-        };
-
-        setMessages((prev) => [
-          ...prev,
-          aiMessage,
-        ]);
-
-      } catch (err) {
-        console.error(err);
-
-      } finally {
-        setIsLoading(false);
-      }
     },
     []
   );
 
+  const sendMessage =
+    useCallback(
+      async (
+        payload: SendMessagePayload
+      ) => {
+
+        setIsLoading(true);
+
+        const userMsg: Message = {
+
+          id: crypto.randomUUID(),
+          role: "user",
+          content:
+            payload.content || "",
+          type:
+            payload.imageFile
+              ? "image"
+              : "text",
+
+          media_url:
+            payload.imageFile
+              ? URL.createObjectURL(
+                  payload.imageFile
+                )
+              : undefined,
+
+        };
+
+        setMessages((p) => [
+          ...p,
+          userMsg,
+        ]);
+
+        await new Promise(
+          (r) => setTimeout(r, 1000)
+        );
+
+        const aiMsg: Message = {
+
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content:
+            "Resposta estilo ChatGPT funcionando perfeitamente.",
+
+        };
+
+        setMessages((p) => [
+          ...p,
+          aiMsg,
+        ]);
+
+        setIsLoading(false);
+
+      },
+      []
+    );
+
   useEffect(() => {
+
     const last =
       messages[messages.length - 1];
 
@@ -102,12 +102,9 @@ export default function Index() {
       last &&
       last.role === "assistant"
     ) {
-      const timer = setTimeout(() => {
-        speak(last.content);
-      }, 500);
-
-      return () => clearTimeout(timer);
+      speak(last.content);
     }
+
   }, [messages, speak]);
 
   return (
@@ -116,11 +113,8 @@ export default function Index() {
       <ChatArea
         messages={messages}
         isLoading={isLoading}
-        activeMode="chat"
-        onModeChange={() => {}}
         onSendMessage={sendMessage}
         onSpeak={speak}
-        onStopSpeaking={stopSpeaking}
       />
 
     </div>

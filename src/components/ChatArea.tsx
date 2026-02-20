@@ -1,31 +1,29 @@
-import { useRef, useEffect } from "react"; // Importa hooks necessários do React
-import { ChatMessage, Message } from "./ChatMessage"; // Componente para exibir uma única mensagem
-import { ChatInput } from "./ChatInput"; // Componente para a entrada do usuário
-import { TypingIndicator } from "./TypingIndicator"; // Componente para indicar digitação
-import { Sparkles, Code2, Camera, Play, MessageCircle } from "lucide-react"; // Ícones do Lucide React
-import { cn } from "@/lib/utils"; // Função utilitária para combinar classes CSS
+import { useRef, useEffect } from "react";
+import { ChatMessage, Message } from "./ChatMessage";
+import { ChatInput } from "./ChatInput";
+import { TypingIndicator } from "./TypingIndicator";
+import { Sparkles, Code2, Camera, Play, MessageCircle } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-// Define a interface para as propriedades do ChatArea
 interface ChatAreaProps {
-  messages: Message[]; // Array de objetos Message a serem exibidos
-  isLoading: boolean; // Indica se a IA está processando uma resposta
-  activeMode: string; // O modo de interação ativo (e.g., 'chat', 'code', 'vision')
-  onModeChange: (mode: string) => void; // Callback para quando o modo é alterado
-  onSendMessage: (content: string, mode: string, imageUrl?: string) => void; // Callback para enviar uma mensagem
-  voiceTranscript?: string; // Transcrição de voz atual (se houver)
-  isListening?: boolean; // Indica se a escuta de voz está ativa
-  isSpeaking?: boolean; // Indica se a IA está falando
-  onStartListening?: () => void; // Callback para iniciar a escuta de voz
-  onStopListening?: () => void; // Callback para parar a escuta de voz
-  onSpeak?: (text: string) => void; // Callback para a IA falar um texto
-  onStopSpeaking?: () => void; // Callback para a IA parar de falar
-  // Propriedades para a funcionalidade de imagem de referência - ADIÇÃO CRÍTICA
-  referenceImage?: string | null; // URL da imagem de referência selecionada
-  onSelectReference?: (url: string) => void; // Callback para selecionar uma imagem de referência
-  onClearReference?: () => void; // Callback para remover a imagem de referência
+  messages: Message[];
+  isLoading: boolean;
+  activeMode: string;
+  onModeChange: (mode: string) => void;
+  onSendMessage: (content: string, mode: string, imageUrl?: string) => void;
+  voiceTranscript?: string;
+  isListening?: boolean;
+  isSpeaking?: boolean;
+  onStartListening?: () => void;
+  onStopListening?: () => void;
+  onSpeak?: (text: string) => void;
+  onStopSpeaking?: () => void;
+  // <--- VIGAS DA PONTE ADICIONADAS --->
+  referenceImage?: string | null;
+  onSelectReference?: (url: string) => void;
+  onClearReference?: () => void;
 }
 
-// Objeto que mapeia os modos de interação às suas informações (ícone, label, cor, descrição)
 const modeInfo = {
   chat: { icon: MessageCircle, label: "Conversa Livre", color: "text-emerald-400", description: "Converse livremente sobre qualquer assunto" },
   code: { icon: Code2, label: "Kojak Code", color: "text-blue-400", description: "Crie aplicativos e código profissional" },
@@ -33,7 +31,6 @@ const modeInfo = {
   motion: { icon: Play, label: "Kojak Motion", color: "text-rose-400", description: "Crie vídeos em alta definição" },
 };
 
-// Sugestões de prompt para cada modo, para o EmptyState
 const suggestions: Record<string, string[]> = {
   chat: [
     "Me explique como funciona a IA",
@@ -57,17 +54,14 @@ const suggestions: Record<string, string[]> = {
   ],
 };
 
-// Componente funcional para exibir o estado vazio do chat
 function EmptyState({ mode, onSuggestionClick }: { mode: string; onSuggestionClick: (text: string) => void }) {
-  // Obtém as informações do modo ativo ou usa o modo 'chat' como fallback
   const info = modeInfo[mode as keyof typeof modeInfo] || modeInfo.chat;
-  const Icon = info.icon; // Componente de ícone dinamicamente baseado no modo
-  const modeSuggestions = suggestions[mode] || suggestions.chat; // Sugestões do modo ou fallback para 'chat'
+  const Icon = info.icon;
+  const modeSuggestions = suggestions[mode] || suggestions.chat;
 
   return (
     <div className="flex-1 flex items-center justify-center p-6">
       <div className="text-center max-w-md animate-fade-in">
-        {/* Animação e ícone principal do Kojak IA */}
         <div className="relative w-20 h-20 mx-auto mb-6">
           <div className="absolute inset-0 bg-gradient-purple rounded-2xl blur-xl opacity-50 animate-pulse-slow" />
           <div className="relative w-full h-full rounded-2xl bg-gradient-purple flex items-center justify-center glow-purple-lg">
@@ -82,23 +76,21 @@ function EmptyState({ mode, onSuggestionClick }: { mode: string; onSuggestionCli
           Plataforma Multimodal de Inteligência Artificial
         </p>
 
-        {/* Cartão de informações do modo atual */}
         <div className="glass-card rounded-2xl p-4 mb-6 neon-border">
           <div className="flex items-center justify-center gap-2 mb-2">
-            <Icon className={cn("w-5 h-5", info.color)} /> {/* Usa cn para combinar classes */}
+            <Icon className={cn("w-5 h-5", info.color)} />
             <span className="font-semibold">{info.label}</span>
           </div>
           <p className="text-sm text-muted-foreground">{info.description}</p>
         </div>
 
-        {/* Seção de sugestões de prompt */}
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground mb-3">Experimente perguntar:</p>
           <div className="flex flex-wrap justify-center gap-2">
             {modeSuggestions.map((text, index) => (
               <button
-                key={index} // Keys são importantes para listas em React
-                onClick={() => onSuggestionClick(text)} // Repassa o clique para o ChatArea
+                key={index}
+                onClick={() => onSuggestionClick(text)}
                 className="px-3 py-1.5 rounded-full glass-card text-xs text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all"
               >
                 {text}
@@ -111,7 +103,6 @@ function EmptyState({ mode, onSuggestionClick }: { mode: string; onSuggestionCli
   );
 }
 
-// Componente principal ChatArea
 export function ChatArea({
   messages,
   isLoading,
@@ -125,55 +116,47 @@ export function ChatArea({
   onStopListening,
   onSpeak,
   onStopSpeaking,
-  referenceImage, // Nova prop: Imagem de referência
-  onSelectReference, // Nova prop: Função para selecionar imagem de referência
-  onClearReference, // Nova prop: Função para limpar imagem de referência
+  referenceImage,
+  onSelectReference,
+  onClearReference,
 }: ChatAreaProps) {
-  // Cria uma referência para o elemento no final das mensagens, para rolagem automática
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Função para rolar para o final do chat
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); // Rola suavemente
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  // Efeito colateral para rolar para o final sempre que as mensagens ou o estado de carregamento mudam
   useEffect(() => {
     scrollToBottom();
   }, [messages, isLoading]);
 
-  // Handler para cliques nas sugestões do EmptyState
   const handleSuggestionClick = (text: string) => {
-    onSendMessage(text, activeMode); // Envia a sugestão como uma nova mensagem
+    onSendMessage(text, activeMode);
   };
 
   return (
-    <div className="flex flex-col h-full"> {/* Container principal, ocupa toda a altura */}
-      {messages.length === 0 ? ( // Condicional para exibir EmptyState ou a área de chat
-        // Exibe o estado vazio se não houver mensagens
+    <div className="flex flex-col h-full">
+      {messages.length === 0 ? (
         <EmptyState mode={activeMode} onSuggestionClick={handleSuggestionClick} />
       ) : (
-        // Renderiza as mensagens se houver alguma
         <div className="flex-1 overflow-y-auto chat-scrollbar px-4 py-6">
           <div className="max-w-3xl mx-auto space-y-6">
             {messages.map((message) => (
               <ChatMessage
-                key={message.id} // Chave única para cada mensagem
+                key={message.id}
                 message={message}
                 onSpeak={onSpeak}
-                // Repassa a função onSelectReference para permitir que ChatMessage lide com imagens anexadas ou referências futuras
-                onSelectReference={onSelectReference}
+                onSelectReference={onSelectReference} // <--- REPASSE PARA A MENSAGEM
               />
             ))}
-            {isLoading && <TypingIndicator />} {/* Exibe indicador de digitação se estiver carregando */}
-            <div ref={messagesEndRef} /> {/* Elemento de referência para rolagem */}
+            {isLoading && <TypingIndicator />}
+            <div ref={messagesEndRef} />
           </div>
         </div>
       )}
 
-      {/* Componente de entrada de chat, sempre visível na parte inferior */}
       <ChatInput
-        onSend={onSendMessage} // Callback para enviar a mensagem
+        onSend={onSendMessage}
         isLoading={isLoading}
         activeMode={activeMode}
         onModeChange={onModeChange}
@@ -183,8 +166,8 @@ export function ChatArea({
         onStartListening={onStartListening}
         onStopListening={onStopListening}
         onStopSpeaking={onStopSpeaking}
-        referenceImage={referenceImage}     // Repassa a imagem de referência para ChatInput
-        onClearReference={onClearReference} // Repassa a função para limpar a imagem de referência
+        referenceImage={referenceImage}     // <--- REPASSE PARA O VISOR DO INPUT
+        onClearReference={onClearReference} // <--- REPASSE PARA O VISOR DO INPUT
       />
     </div>
   );

@@ -24,25 +24,17 @@ const Index = () => {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [localMessages, setLocalMessages] = useState<Message[]>([]);
+  
+  // <--- NOVO: Estado que guarda a foto Alvo (Jet Ski) --->
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
   
   const { user, loading: authLoading, profile } = useAuth();
+  
   const { chats, currentChat, messages: dbMessages, createChat, selectChat, deleteChat, addMessage, updateChatTitle } = useChats();
   const { isListening, isSpeaking, transcript, startListening, stopListening, speak, stopSpeaking } = useVoice();
   const { toast } = useToast();
 
   const messages = user && currentChat ? dbMessages : localMessages;
-
-  // <--- INJEÇÃO DE VOZ AUTOMÁTICA (SÓ ISSO MUDOU) --->
-  useEffect(() => {
-    const lastMessage = messages[messages.length - 1];
-    if (lastMessage && lastMessage.role === "assistant" && lastMessage.type === "text" && !isSpeaking && !isLoading) {
-      const timer = setTimeout(() => {
-        speak(lastMessage.content);
-      }, 600);
-      return () => clearTimeout(timer);
-    }
-  }, [messages, speak, isSpeaking, isLoading]);
 
   const logActivity = useCallback(async (action: string, details?: any) => {
     if (!user) return;
@@ -85,14 +77,16 @@ const Index = () => {
       const personalContext = profile?.personal_context || "";
       const promptWithContext = personalContext ? `[Contexto do usuário: ${personalContext}]\n\n${content}` : content;
       
+      // <--- NOVO: Disparo duplo de imagens para a IA --->
       const { data, error } = await supabase.functions.invoke(config.function, {
         body: { 
           prompt: promptWithContext, 
-          image: imageUrl,                
-          reference_image: referenceImage 
+          image: imageUrl,                // A foto que você subiu (Seu rosto)
+          reference_image: referenceImage // A foto que você clicou no histórico (Jet Ski)
         },
       });
 
+      // Limpa a referência depois que enviou com sucesso
       setReferenceImage(null);
 
       if (error) throw new Error(error.message || "Erro ao processar requisição");
@@ -116,7 +110,7 @@ const Index = () => {
         };
         setLocalMessages(prev => [...prev, assistantMessage]);
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error("Erro ao enviar mensagem:", error);
       const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
       toast({ title: "Erro", description: errorMessage, variant: "destructive" });
@@ -180,6 +174,7 @@ const Index = () => {
           onStopListening={stopListening}
           onSpeak={speak}
           onStopSpeaking={stopSpeaking}
+          // <--- NOVO: Repassando as props da imagem de referência --->
           referenceImage={referenceImage}
           onSelectReference={setReferenceImage}
           onClearReference={() => setReferenceImage(null)}

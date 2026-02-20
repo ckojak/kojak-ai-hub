@@ -1,20 +1,9 @@
 import { useState, useRef } from "react";
-
-import { Send, ImagePlus, X } from "lucide-react";
-
-export interface SendMessagePayload {
-
-  content: string;
-
-  type?: "text" | "image";
-
-  media_url?: string;
-
-}
+import { Send, X } from "lucide-react";
 
 interface Props {
 
-  onSend: (payload: SendMessagePayload) => Promise<void>;
+  onSend: (content: string) => Promise<void>;
 
   isLoading: boolean;
 
@@ -42,31 +31,19 @@ export function ChatInput({
 
   async function handleSend() {
 
-    if (!text.trim() && !referenceImage) return;
+    if (!text.trim()) return;
 
-    await onSend({
-
-      content: text,
-
-      type: referenceImage ? "image" : "text",
-
-      media_url: referenceImage || undefined,
-
-    });
+    await onSend(text);
 
     setText("");
 
-    if (inputRef.current) {
-
-      inputRef.current.focus();
-
-    }
+    inputRef.current?.focus();
 
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
 
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter") {
 
       e.preventDefault();
 
@@ -85,25 +62,17 @@ export function ChatInput({
         <div className="relative mb-2 inline-block">
 
           <img
-
             src={referenceImage}
-
             className="h-20 rounded-lg"
-
           />
 
           {onClearReference && (
 
             <button
-
               onClick={onClearReference}
-
               className="absolute top-1 right-1 bg-black/70 rounded-full p-1"
-
             >
-
               <X size={14} />
-
             </button>
 
           )}

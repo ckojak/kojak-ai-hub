@@ -1,122 +1,38 @@
-import {
-  useState,
-  useCallback,
-  useEffect,
-} from "react";
-
 import { ChatArea } from "@/components/ChatArea";
-
-import {
-  Message,
-} from "@/components/ChatMessage";
-
-import {
-  SendMessagePayload,
-} from "@/components/ChatInput";
+import { useChats } from "@/hooks/useChats";
+import { useVoice } from "@/hooks/useVoice";
 
 export default function Index() {
 
-  const [messages, setMessages] =
-    useState<Message[]>([]);
+  const {
 
-  const [isLoading, setIsLoading] =
-    useState(false);
+    messages,
+    sendMessage,
+    isLoading
 
-  const speak = useCallback(
-    (text: string) => {
+  } = useChats();
 
-      speechSynthesis.cancel();
+  const {
 
-      const u =
-        new SpeechSynthesisUtterance(text);
+    speak
 
-      speechSynthesis.speak(u);
-
-    },
-    []
-  );
-
-  const sendMessage =
-    useCallback(
-      async (
-        payload: SendMessagePayload
-      ) => {
-
-        setIsLoading(true);
-
-        const userMsg: Message = {
-
-          id: crypto.randomUUID(),
-          role: "user",
-          content:
-            payload.content || "",
-          type:
-            payload.imageFile
-              ? "image"
-              : "text",
-
-          media_url:
-            payload.imageFile
-              ? URL.createObjectURL(
-                  payload.imageFile
-                )
-              : undefined,
-
-        };
-
-        setMessages((p) => [
-          ...p,
-          userMsg,
-        ]);
-
-        await new Promise(
-          (r) => setTimeout(r, 1000)
-        );
-
-        const aiMsg: Message = {
-
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content:
-            "Resposta estilo ChatGPT funcionando perfeitamente.",
-
-        };
-
-        setMessages((p) => [
-          ...p,
-          aiMsg,
-        ]);
-
-        setIsLoading(false);
-
-      },
-      []
-    );
-
-  useEffect(() => {
-
-    const last =
-      messages[messages.length - 1];
-
-    if (
-      last &&
-      last.role === "assistant"
-    ) {
-      speak(last.content);
-    }
-
-  }, [messages, speak]);
+  } = useVoice();
 
   return (
+
     <div className="h-screen">
 
       <ChatArea
+
         messages={messages}
         isLoading={isLoading}
         onSendMessage={sendMessage}
         onSpeak={speak}
+
       />
 
     </div>
+
   );
+
 }

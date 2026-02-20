@@ -1,50 +1,70 @@
-import { useState, useCallback } from "react";
+import { useState, useRef } from "react";
 
-import { SendHorizonal } from "lucide-react";
+import { Send, ImagePlus, X } from "lucide-react";
 
-interface Props {
+export interface SendMessagePayload {
 
-  onSend: (message: string) => Promise<void> | void;
+  content: string;
 
-  disabled?: boolean;
+  type?: "text" | "image";
+
+  media_url?: string;
 
 }
 
-export function ChatInput({ onSend, disabled }: Props) {
+interface Props {
 
-  const [value, setValue] = useState("");
+  onSend: (payload: SendMessagePayload) => Promise<void>;
 
-  const [sending, setSending] = useState(false);
+  isLoading: boolean;
 
-  const handleSend = useCallback(async () => {
+  referenceImage?: string | null;
 
-    const text = value.trim();
+  onClearReference?: () => void;
 
-    if (!text) return;
+}
 
-    if (sending || disabled) return;
+export function ChatInput({
 
-    try {
+  onSend,
 
-      setSending(true);
+  isLoading,
 
-      await onSend(text);
+  referenceImage,
 
-      setValue("");
+  onClearReference,
 
-    } catch (error) {
+}: Props) {
 
-      console.error("Send message error:", error);
+  const [text, setText] = useState("");
 
-    } finally {
+  const inputRef = useRef<HTMLInputElement>(null);
 
-      setSending(false);
+  async function handleSend() {
+
+    if (!text.trim() && !referenceImage) return;
+
+    await onSend({
+
+      content: text,
+
+      type: referenceImage ? "image" : "text",
+
+      media_url: referenceImage || undefined,
+
+    });
+
+    setText("");
+
+    if (inputRef.current) {
+
+      inputRef.current.focus();
 
     }
 
-  }, [value, sending, disabled, onSend]);
+  }
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
 
     if (e.key === "Enter" && !e.shiftKey) {
 
@@ -54,29 +74,59 @@ export function ChatInput({ onSend, disabled }: Props) {
 
     }
 
-  }, [handleSend]);
+  }
 
   return (
 
-    <div className="border-t border-border p-3 bg-background">
+    <div className="border-t border-white/10 p-3 bg-black">
 
-      <div className="flex items-center gap-2">
+      {referenceImage && (
+
+        <div className="relative mb-2 inline-block">
+
+          <img
+
+            src={referenceImage}
+
+            className="h-20 rounded-lg"
+
+          />
+
+          {onClearReference && (
+
+            <button
+
+              onClick={onClearReference}
+
+              className="absolute top-1 right-1 bg-black/70 rounded-full p-1"
+
+            >
+
+              <X size={14} />
+
+            </button>
+
+          )}
+
+        </div>
+
+      )}
+
+      <div className="flex gap-2">
 
         <input
 
-          type="text"
+          ref={inputRef}
 
-          value={value}
+          value={text}
 
-          onChange={(e) => setValue(e.target.value)}
+          onChange={(e) => setText(e.target.value)}
 
           onKeyDown={handleKeyDown}
 
           placeholder="Digite sua mensagem..."
 
-          disabled={disabled || sending}
-
-          className="flex-1 px-4 py-3 rounded-xl bg-muted outline-none focus:ring-2 focus:ring-primary"
+          className="flex-1 bg-black border border-white/10 rounded-lg px-3 py-2 outline-none"
 
         />
 
@@ -84,13 +134,13 @@ export function ChatInput({ onSend, disabled }: Props) {
 
           onClick={handleSend}
 
-          disabled={disabled || sending || !value.trim()}
+          disabled={isLoading}
 
-          className="p-3 rounded-xl bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50"
+          className="bg-white text-black px-3 rounded-lg disabled:opacity-50"
 
         >
 
-          <SendHorizonal size={18} />
+          <Send size={18} />
 
         </button>
 

@@ -33,7 +33,7 @@ const Index = () => {
 
   const messages = user && currentChat ? dbMessages : localMessages;
 
-  // <--- NOVO: GATILHO DE VOZ AUTOMÁTICA (Estilo Gemini) --->
+  // GATILHO DE VOZ AUTOMÁTICA
   useEffect(() => {
     const lastMessage = messages[messages.length - 1];
     if (lastMessage && lastMessage.role === "assistant" && lastMessage.type === "text" && !isSpeaking && !isLoading) {
@@ -49,6 +49,15 @@ const Index = () => {
     await supabase.from("activity_log").insert({ user_id: user.id, action, details });
   }, [user]);
 
+  // FUNÇÃO QUE ESTAVA FALTANDO E CAUSOU A TELA PRETA
+  const handleNewChat = useCallback(async () => {
+    if (user) {
+      await createChat(activeMode);
+    }
+    setLocalMessages([]);
+    setReferenceImage(null);
+  }, [user, createChat, activeMode]);
+
   const handleSendMessage = useCallback(async (content: string, mode: string, imageUrl?: string) => {
     if (!content.trim() && !imageUrl && !referenceImage) return;
 
@@ -63,15 +72,15 @@ const Index = () => {
         }
         chatId = newChat.id;
       }
-      await addMessage("user", content, imageUrl ? "image" : "text", imageUrl);
+      await addMessage("user", content, (imageUrl || referenceImage) ? "image" : "text", imageUrl);
     } else {
       const userMessage: Message = {
         id: Date.now().toString(),
         chat_id: "local",
         role: "user",
         content,
-        type: imageUrl ? "image" : "text",
-        media_url: imageUrl,
+        type: (imageUrl || referenceImage) ? "image" : "text",
+        media_url: imageUrl || undefined,
         created_at: new Date().toISOString(),
       };
       setLocalMessages(prev => [...prev, userMessage]);
@@ -92,7 +101,7 @@ const Index = () => {
         },
       });
 
-      setReferenceImage(null); // Limpa imagem alvo após envio
+      setReferenceImage(null);
 
       if (error) throw new Error(error.message || "Erro na Edge Function");
       if (data.error) throw new Error(data.error);
@@ -126,9 +135,25 @@ const Index = () => {
 
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
-      <Sidebar chats={chats} currentChatId={currentChat?.id} onSelectChat={selectChat} onNewChat={handleNewChat} onDeleteChat={deleteChat} onOpenSettings={() => setSettingsOpen(true)} />
-      <MobileHistorySheet open={historyOpen} onOpenChange={setHistoryOpen} chats={chats} currentChatId={currentChat?.id} onSelectChat={selectChat} onNewChat={handleNewChat} onDeleteChat={deleteChat} />
+      <Sidebar 
+        chats={chats} 
+        currentChatId={currentChat?.id} 
+        onSelectChat={selectChat} 
+        onNewChat={handleNewChat} 
+        onDeleteChat={deleteChat} 
+        onOpenSettings={() => setSettingsOpen(true)} 
+      />
+      <MobileHistorySheet 
+        open={historyOpen} 
+        onOpenChange={setHistoryOpen} 
+        chats={chats} 
+        currentChatId={currentChat?.id} 
+        onSelectChat={selectChat} 
+        onNewChat={handleNewChat} 
+        onDeleteChat={deleteChat} 
+      />
       <SettingsPanel open={settingsOpen} onOpenChange={setSettingsOpen} />
+      
       <main className="flex-1 relative overflow-hidden md:ml-72 transition-all duration-300">
         <ChatArea
           messages={messages}
@@ -148,7 +173,13 @@ const Index = () => {
           onClearReference={() => setReferenceImage(null)}
         />
       </main>
-      <BottomBar activeMode={activeMode} onModeChange={setActiveMode} onOpenHistory={() => setHistoryOpen(true)} onOpenSettings={() => setSettingsOpen(true)} />
+      
+      <BottomBar 
+        activeMode={activeMode} 
+        onModeChange={setActiveMode} 
+        onOpenHistory={() => setHistoryOpen(true)} 
+        onOpenSettings={() => setSettingsOpen(true)} 
+      />
     </div>
   );
 };

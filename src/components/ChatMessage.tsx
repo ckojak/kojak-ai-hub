@@ -34,157 +34,108 @@ export const ChatMessage = memo(function ChatMessage({
   onSpeak,
   onSelectReference,
 }: Props) {
-
   const [copied, setCopied] = useState(false);
 
   const isUser = message.role === "user";
 
   const copy = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(message.content || "");
-      setCopied(true);
+    await navigator.clipboard.writeText(message.content);
+    setCopied(true);
 
-      setTimeout(() => setCopied(false), 2000);
-    } catch (error) {
-      console.error("Copy failed:", error);
-    }
+    setTimeout(() => setCopied(false), 2000);
   }, [message.content]);
 
   const download = useCallback(async () => {
-
     if (!message.media_url) return;
 
-    try {
+    const res = await fetch(message.media_url);
+    const blob = await res.blob();
 
-      const res = await fetch(message.media_url);
+    const url = URL.createObjectURL(blob);
 
-      if (!res.ok) throw new Error("Download failed");
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "image.png";
+    a.click();
 
-      const blob = await res.blob();
-
-      const url = URL.createObjectURL(blob);
-
-      const a = document.createElement("a");
-
-      a.href = url;
-      a.download = "image.png";
-
-      document.body.appendChild(a);
-
-      a.click();
-
-      a.remove();
-
-      URL.revokeObjectURL(url);
-
-    } catch (error) {
-      console.error("Download error:", error);
-    }
-
+    URL.revokeObjectURL(url);
   }, [message.media_url]);
 
   return (
-
-    <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
-
-      <div className="mt-1 text-muted-foreground">
-        {isUser ? <User size={18} /> : <Sparkles size={18} />}
+    <div
+      className={`flex gap-3 ${
+        isUser ? "flex-row-reverse" : ""
+      }`}
+    >
+      <div>
+        {isUser ? <User /> : <Sparkles />}
       </div>
 
-      <div className="max-w-[75%] space-y-2">
+      <div className="max-w-[75%]">
 
-        {message.type === "image" && message.media_url && (
+        {message.type === "image" &&
+          message.media_url && (
+            <div className="relative group">
 
-          <div className="relative group">
+              <img
+                src={message.media_url}
+                className="rounded-xl"
+              />
 
-            <img
-              src={message.media_url}
-              alt="Generated"
-              className="rounded-xl max-w-full"
-              loading="lazy"
-            />
+              {!isUser && (
+                <div className="opacity-0 group-hover:opacity-100 absolute inset-0 bg-black/60 flex gap-2 justify-center items-center">
 
-            {!isUser && (
-
-              <div className="opacity-0 group-hover:opacity-100 transition absolute inset-0 bg-black/60 flex gap-2 justify-center items-center rounded-xl">
-
-                <button
-                  onClick={download}
-                  className="p-2 bg-white/10 rounded-lg hover:bg-white/20"
-                >
-                  <Download size={18} />
-                </button>
-
-                {onSelectReference && (
-                  <button
-                    onClick={() => onSelectReference(message.media_url!)}
-                    className="p-2 bg-white/10 rounded-lg hover:bg-white/20"
-                  >
-                    <ImagePlus size={18} />
+                  <button onClick={download}>
+                    <Download />
                   </button>
-                )}
 
-              </div>
+                  {onSelectReference && (
+                    <button
+                      onClick={() =>
+                        onSelectReference(
+                          message.media_url!
+                        )
+                      }
+                    >
+                      <ImagePlus />
+                    </button>
+                  )}
 
-            )}
-
-          </div>
-
-        )}
+                </div>
+              )}
+            </div>
+          )}
 
         {message.content && (
-
-          <div className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-            isUser
-              ? "bubble-user text-white"
-              : "bubble-ai text-foreground"
-          }`}>
-
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              rehypePlugins={[rehypeSanitize]}
-            >
-              {message.content}
-            </ReactMarkdown>
-
-          </div>
-
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            rehypePlugins={[rehypeSanitize]}
+          >
+            {message.content}
+          </ReactMarkdown>
         )}
 
         {!isUser && (
+          <div className="flex gap-2 mt-1">
 
-          <div className="flex gap-2">
-
-            <button
-              onClick={copy}
-              className="p-1 hover:bg-white/10 rounded"
-            >
-              {copied ? (
-                <Check size={16} />
-              ) : (
-                <Copy size={16} />
-              )}
+            <button onClick={copy}>
+              {copied ? <Check /> : <Copy />}
             </button>
 
             {onSpeak && (
-
               <button
-                onClick={() => onSpeak(message.content)}
-                className="p-1 hover:bg-white/10 rounded"
+                onClick={() =>
+                  onSpeak(message.content)
+                }
               >
-                <Volume2 size={16} />
+                <Volume2 />
               </button>
-
             )}
 
           </div>
-
         )}
 
       </div>
-
     </div>
-
   );
-
 });

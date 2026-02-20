@@ -1,237 +1,219 @@
-import { useState, useCallback, useEffect } from "react";
-
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "./useAuth";
 
-import type { Message } from "@/components/ChatMessage";
+export interface Chat {
+  id: string;
+  user_id: string;
+  title: string;
+  mode: string;
+  created_at: string;
+  updated_at: string;
+}
 
-interface SendMessagePayload {
-
+export interface Message {
+  id: string;
+  chat_id: string;
+  role: "user" | "assistant";
   content: string;
-
-  type?: "text" | "image";
-
+  type: "text" | "code" | "image" | "video";
   media_url?: string;
-
+  created_at: string;
 }
 
 export function useChats() {
-
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [currentChat, setCurrentChat] = useState<Chat | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [loading, setLoading] = useState(false);
+  
+  const { user } = useAuth();
 
-  const [isLoading, setIsLoading] = useState(false);
-
-  const [chatId, setChatId] = useState<string | null>(null);
-
-  /*
-  ---------------------------------------
-  CREATE CHAT
-  ---------------------------------------
-  */
-
-  const createChat = useCallback(async () => {
-
-    try {
-
-      const { data, error } = await supabase
-        .from("chats")
-        .insert({})
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      setChatId(data.id);
-
-    } catch (error) {
-
-      console.error("Create chat error:", error);
-
+  // Fetch all chats for the current user
+  const fetchChats = useCallback(async () => {
+    if (!user) {
+      setChats([]);
+      return;
     }
 
+    const { data, error } = await supabase
+      .from("chats")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("updated_at", { ascending: false });
+
+    if (!error && data) {
+      setChats(data);
+    }
+  }, [user]);
+
+  // Fetch messages for a specific chat
+  const fetchMessages = useCallback(async (chatId: string) => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("messages")
+      .select("*")
+      .eq("chat_id", chatId)
+      .order("created_at", { ascending: true });
+
+    if (!error && data) {
+      setMessages(data as Message[]);
+    }
+    setLoading(false);
   }, []);
 
-  /*
-  ---------------------------------------
-  LOAD MESSAGES
-  ---------------------------------------
-  */
+  // Create a new chat
+  const createChat = useCallback(async (mode: string = "chat") => {
+    if (!user) return null;
 
-  const loadMessages = useCallback(async (id: string) => {
+    const { data, error } = await supabase
+      .from("chats")
+      .insert({ 
+        user_id: user.id,
+        mode, 
+        title: "Nova Conversa" 
+      })
+      .select()
+      .single();
 
-    try {
+    if (!error && data) {
+      setChats((prev) => [data, ...prev]);
+      setCurrentChat(data);
+      setMessages([]);
+      return data;
+    }
+    return null;
+  }, [user]);
+
+  // Update chat title
+  const updateChatTitle = useCallback(async (chatId: string, title: string) => {
+    const { error } = await supabase
+      .from("chats")
+      .update({ title })
+      .eq("id", chatId);
+
+    if (!error) {
+      setChats((prev) =>
+        prev.map((chat) => (chat.id === chatId ? { ...chat, title } : chat))
+      );
+      if (currentChat?.id === chatId) {
+        setCurrentChat((prev) => (prev ? { ...prev, title } : null));
+      }
+    }
+  }, [currentChat]);
+
+  // Delete a chat
+  const deleteChat = useCallback(async (chatId: string) => {
+    const { error } = await supabase.from("chats").delete().eq("id", chatId);
+
+    if (!error) {
+      setChats((prev) => prev.filter((chat) => chat.id !== chatId));
+      if (currentChat?.id === chatId) {
+        setCurrentChat(null);
+        setMessages([]);
+      }
+    }
+  }, [currentChat]);
+
+  // Add a message to current chat
+  const addMessage = useCallback(
+    async (
+      role: "user" | "assistant",
+      content: string,
+      type: "text" | "code" | "image" | "video" = "text",
+      mediaUrl?: string
+    ) => {
+      if (!currentChat) return null;
 
       const { data, error } = await supabase
         .from("messages")
-        .select("*")
-        .eq("chat_id", id)
-        .order("created_at", { ascending: true });
+        .insert({
+          chat_id: currentChat.id,
+          role,
+          content,
+          type,
+          media_url: mediaUrl,
+        })
+        .select()
+        .single();
 
-      if (error) throw error;
+      if (!error && data) {
+        setMessages((prev) => [...prev, data as Message]);
 
-      setMessages(data || []);
+        // Update chat's updated_at
+        await supabase
+          .from("chats")
+          .update({ updated_at: new Date().toISOString() })
+          .eq("id", currentChat.id);
 
-    } catch (error) {
+        return data;
+      }
+      return null;
+    },
+    [currentChat]
+  );
 
-      console.error("Load messages error:", error);
+  // Select a chat
+  const selectChat = useCallback(
+    async (chat: Chat) => {
+      setCurrentChat(chat);
+      await fetchMessages(chat.id);
+    },
+    [fetchMessages]
+  );
 
-    }
-
-  }, []);
-
-  /*
-  ---------------------------------------
-  INIT
-  ---------------------------------------
-  */
-
+  // Fetch chats when user changes
   useEffect(() => {
-
-    createChat();
-
-  }, [createChat]);
-
-  useEffect(() => {
-
-    if (chatId) {
-
-      loadMessages(chatId);
-
+    if (user) {
+      fetchChats();
+    } else {
+      setChats([]);
+      setCurrentChat(null);
+      setMessages([]);
     }
+  }, [user, fetchChats]);
 
-  }, [chatId, loadMessages]);
+  // Real-time subscription for messages
+  useEffect(() => {
+    if (!currentChat) return;
 
-  /*
-  ---------------------------------------
-  SEND MESSAGE
-  ---------------------------------------
-  */
-
-  const sendMessage = useCallback(async (payload: SendMessagePayload) => {
-
-    if (!chatId) return;
-
-    try {
-
-      setIsLoading(true);
-
-      const content = payload.content;
-
-      /*
-      USER MESSAGE LOCAL
-      */
-
-      const userMessage: Message = {
-
-        id: crypto.randomUUID(),
-
-        role: "user",
-
-        content,
-
-        type: payload.type || "text",
-
-        media_url: payload.media_url,
-
-      };
-
-      setMessages(prev => [...prev, userMessage]);
-
-      /*
-      SAVE USER MESSAGE
-      */
-
-      await supabase.from("messages").insert({
-
-        chat_id: chatId,
-
-        role: "user",
-
-        content,
-
-        type: userMessage.type,
-
-        media_url: userMessage.media_url,
-
-      });
-
-      /*
-      CALL EDGE FUNCTION
-      */
-
-      const { data, error } = await supabase.functions.invoke("chat", {
-
-        body: {
-
-          message: content,
-
-          chat_id: chatId,
-
+    const channel = supabase
+      .channel(`messages-${currentChat.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `chat_id=eq.${currentChat.id}`,
         },
+        (payload) => {
+          const newMessage = payload.new as Message;
+          setMessages((prev) => {
+            // Avoid duplicates
+            if (prev.some((m) => m.id === newMessage.id)) return prev;
+            return [...prev, newMessage];
+          });
+        }
+      )
+      .subscribe();
 
-      });
-
-      if (error) throw error;
-
-      /*
-      AI MESSAGE LOCAL
-      */
-
-      const aiMessage: Message = {
-
-        id: crypto.randomUUID(),
-
-        role: "assistant",
-
-        content: data?.response || "Erro ao gerar resposta",
-
-        type: "text",
-
-      };
-
-      setMessages(prev => [...prev, aiMessage]);
-
-      /*
-      SAVE AI MESSAGE
-      */
-
-      await supabase.from("messages").insert({
-
-        chat_id: chatId,
-
-        role: "assistant",
-
-        content: aiMessage.content,
-
-        type: "text",
-
-      });
-
-    } catch (error) {
-
-      console.error("Send message error:", error);
-
-    } finally {
-
-      setIsLoading(false);
-
-    }
-
-  }, [chatId]);
-
-  /*
-  ---------------------------------------
-  RETURN
-  ---------------------------------------
-  */
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentChat]);
 
   return {
-
+    chats,
+    currentChat,
     messages,
-
-    sendMessage,
-
-    isLoading,
-
+    loading,
+    createChat,
+    selectChat,
+    deleteChat,
+    addMessage,
+    updateChatTitle,
+    setCurrentChat,
+    setMessages,
   };
-
 }

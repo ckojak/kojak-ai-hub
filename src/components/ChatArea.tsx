@@ -1,143 +1,72 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useCallback } from "react";
+import { ChatMessage, Message } from "./ChatMessage";
+import { ChatInput } from "./ChatInput";
+import { TypingIndicator } from "./TypingIndicator";
 
-import {
-  ChatMessage,
-  Message,
-} from "./ChatMessage";
-
-import {
-  ChatInput,
-  SendMessagePayload,
-} from "./ChatInput";
-
-interface Props {
-
+interface ChatAreaProps {
   messages: Message[];
-
   isLoading: boolean;
-
-  onSendMessage: (
-    payload: SendMessagePayload
-  ) => Promise<void>;
-
+  activeMode: string;
+  onModeChange: (mode: string) => void;
+  onSendMessage: any;
+  voiceTranscript?: string;
+  isListening?: boolean;
+  isSpeaking?: boolean;
+  onStartListening?: () => void;
+  onStopListening?: () => void;
   onSpeak?: (text: string) => void;
-
+  onStopSpeaking?: () => void;
   referenceImage?: string | null;
-
+  onSelectReference?: (url: string) => void;
   onClearReference?: () => void;
-
 }
 
-export function ChatArea({
+export function ChatArea(props: ChatAreaProps) {
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  messages,
-
-  isLoading,
-
-  onSendMessage,
-
-  onSpeak,
-
-  referenceImage,
-
-  onClearReference,
-
-}: Props) {
-
-  const ref = useRef<HTMLDivElement>(null);
-
-  /*
-  ---------------------------------------
-  AUTO SCROLL
-  ---------------------------------------
-  */
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({
+      behavior: "smooth",
+    });
+  }, []);
 
   useEffect(() => {
-
-    ref.current?.scrollIntoView({
-
-      behavior: "smooth",
-
-    });
-
-  }, [messages, isLoading]);
-
-  /*
-  ---------------------------------------
-  SAFETY
-  ---------------------------------------
-  */
-
-  const safeMessages = messages ?? [];
-
-  /*
-  ---------------------------------------
-  UI
-  ---------------------------------------
-  */
+    scrollToBottom();
+  }, [props.messages, props.isLoading, scrollToBottom]);
 
   return (
-
     <div className="flex flex-col h-full">
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-
-        {/* EMPTY STATE */}
-
-        {safeMessages.length === 0 && !isLoading && (
-
-          <div className="text-center text-muted-foreground mt-10">
-
-            Kojak AI pronta.
-
-          </div>
-
-        )}
-
-        {/* MESSAGES */}
-
-        {safeMessages.map((m) => (
-
+      <div className="flex-1 overflow-y-auto">
+        {props.messages.map((message) => (
           <ChatMessage
-            key={m.id}
-            message={m}
-            onSpeak={onSpeak}
+            key={message.id}
+            message={message}
+            onSpeak={props.onSpeak}
+            onSelectReference={props.onSelectReference}
           />
-
         ))}
 
-        {/* LOADING */}
+        {props.isLoading && <TypingIndicator />}
 
-        {isLoading && (
-
-          <div className="text-sm text-muted-foreground">
-
-            Pensando...
-
-          </div>
-
-        )}
-
-        <div ref={ref} />
-
+        <div ref={messagesEndRef} />
       </div>
 
-      {/* INPUT */}
-
       <ChatInput
-
-        onSend={onSendMessage}
-
-        isLoading={isLoading}
-
-        referenceImage={referenceImage}
-
-        onClearReference={onClearReference}
-
+        onSend={props.onSendMessage}
+        isLoading={props.isLoading}
+        activeMode={props.activeMode}
+        onModeChange={props.onModeChange}
+        voiceTranscript={props.voiceTranscript}
+        isListening={props.isListening}
+        isSpeaking={props.isSpeaking}
+        onStartListening={props.onStartListening}
+        onStopListening={props.onStopListening}
+        onStopSpeaking={props.onStopSpeaking}
+        referenceImage={props.referenceImage}
+        onClearReference={props.onClearReference}
       />
 
     </div>
-
   );
-
 }

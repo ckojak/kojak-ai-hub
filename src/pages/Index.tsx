@@ -1,73 +1,128 @@
+import { useState, useCallback, useEffect, useRef } from "react";
+
 import { ChatArea } from "@/components/ChatArea";
-import { useChats } from "@/hooks/useChats";
-import { useVoice } from "@/hooks/useVoice";
+import { Message } from "@/components/ChatMessage";
 
 export default function Index() {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
 
-  /*
-  ---------------------------------------
-  CHAT HOOK
-  ---------------------------------------
-  */
+  const abortControllerRef =
+    useRef<AbortController | null>(null);
 
-  const {
+  const speak = useCallback((text: string) => {
+    if (!text) return;
 
-    messages,
-    sendMessage,
-    isLoading
+    window.speechSynthesis.cancel();
 
-  } = useChats();
+    const utterance =
+      new SpeechSynthesisUtterance(text);
 
-  /*
-  ---------------------------------------
-  VOICE HOOK
-  ---------------------------------------
-  */
+    utterance.onstart = () =>
+      setIsSpeaking(true);
 
-  const {
+    utterance.onend = () =>
+      setIsSpeaking(false);
 
-    speak
+    utterance.onerror = () =>
+      setIsSpeaking(false);
 
-  } = useVoice();
+    window.speechSynthesis.speak(utterance);
 
-  /*
-  ---------------------------------------
-  SAFETY FALLBACKS (PREVINE TELA PRETA)
-  ---------------------------------------
-  */
+  }, []);
 
-  const safeMessages = messages ?? [];
+  const stopSpeaking = useCallback(() => {
+    window.speechSynthesis.cancel();
+    setIsSpeaking(false);
+  }, []);
 
-  const safeSendMessage = sendMessage ?? (async () => {});
+  const sendMessage = useCallback(
+    async ({
+      content,
+      imageFile,
+    }: {
+      content?: string;
+      imageFile?: File | null;
+    }) => {
+      if (!content && !imageFile) return;
 
-  const safeSpeak = speak ?? (() => {});
+      setIsLoading(true);
 
-  const safeLoading = isLoading ?? false;
+      const userMessage: Message = {
+        id: crypto.randomUUID(),
+        role: "user",
+        content: content || "",
+        type: imageFile ? "image" : "text",
+        media_url: imageFile
+          ? URL.createObjectURL(imageFile)
+          : undefined,
+      };
 
-  /*
-  ---------------------------------------
-  UI
-  ---------------------------------------
-  */
+      setMessages((prev) => [
+        ...prev,
+        userMessage,
+      ]);
+
+      try {
+        abortControllerRef.current =
+          new AbortController();
+
+        await new Promise((resolve) =>
+          setTimeout(resolve, 1000)
+        );
+
+        const aiMessage: Message = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content:
+            "Resposta profissional simulada.",
+        };
+
+        setMessages((prev) => [
+          ...prev,
+          aiMessage,
+        ]);
+
+      } catch (err) {
+        console.error(err);
+
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    const last =
+      messages[messages.length - 1];
+
+    if (
+      last &&
+      last.role === "assistant"
+    ) {
+      const timer = setTimeout(() => {
+        speak(last.content);
+      }, 500);
+
+      return () => clearTimeout(timer);
+    }
+  }, [messages, speak]);
 
   return (
-
-    <div className="h-screen w-full bg-background text-foreground">
+    <div className="h-screen">
 
       <ChatArea
-
-        messages={safeMessages}
-
-        isLoading={safeLoading}
-
-        onSendMessage={safeSendMessage}
-
-        onSpeak={safeSpeak}
-
+        messages={messages}
+        isLoading={isLoading}
+        activeMode="chat"
+        onModeChange={() => {}}
+        onSendMessage={sendMessage}
+        onSpeak={speak}
+        onStopSpeaking={stopSpeaking}
       />
 
     </div>
-
   );
-
 }

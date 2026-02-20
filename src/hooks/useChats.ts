@@ -4,6 +4,16 @@ import { supabase } from "@/integrations/supabase/client";
 
 import type { Message } from "@/components/ChatMessage";
 
+interface SendMessagePayload {
+
+  content: string;
+
+  type?: "text" | "image";
+
+  media_url?: string;
+
+}
+
 export function useChats() {
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -96,13 +106,15 @@ export function useChats() {
   ---------------------------------------
   */
 
-  const sendMessage = useCallback(async (content: string) => {
+  const sendMessage = useCallback(async (payload: SendMessagePayload) => {
 
     if (!chatId) return;
 
     try {
 
       setIsLoading(true);
+
+      const content = payload.content;
 
       /*
       USER MESSAGE LOCAL
@@ -115,6 +127,10 @@ export function useChats() {
         role: "user",
 
         content,
+
+        type: payload.type || "text",
+
+        media_url: payload.media_url,
 
       };
 
@@ -131,6 +147,10 @@ export function useChats() {
         role: "user",
 
         content,
+
+        type: userMessage.type,
+
+        media_url: userMessage.media_url,
 
       });
 
@@ -164,6 +184,8 @@ export function useChats() {
 
         content: data?.response || "Erro ao gerar resposta",
 
+        type: "text",
+
       };
 
       setMessages(prev => [...prev, aiMessage]);
@@ -179,6 +201,8 @@ export function useChats() {
         role: "assistant",
 
         content: aiMessage.content,
+
+        type: "text",
 
       });
 

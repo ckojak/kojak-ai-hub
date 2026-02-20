@@ -1,93 +1,212 @@
-import { useState, useCallback } from "react";
-import { Message } from "@/components/ChatMessage";
-import { SendMessagePayload } from "@/components/ChatInput";
+import { useState, useCallback, useEffect } from "react";
 
-const GEMINI_API_KEY = "AIzaSyCSpFXPbWmtuI6ztBYTUSf7pYnZqyLXAtI";
+import { supabase } from "@/integrations/supabase/client";
+
+import type { Message } from "@/components/ChatMessage";
 
 export function useChats() {
 
   const [messages, setMessages] = useState<Message[]>([]);
+
   const [isLoading, setIsLoading] = useState(false);
 
-  const sendMessage = useCallback(async (payload: SendMessagePayload) => {
+  const [chatId, setChatId] = useState<string | null>(null);
 
-    if (!payload.content) return;
+  /*
+  ---------------------------------------
+  CREATE CHAT
+  ---------------------------------------
+  */
 
-    setIsLoading(true);
-
-    const userMessage: Message = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content: payload.content,
-      created_at: new Date().toISOString()
-    };
-
-    setMessages(prev => [...prev, userMessage]);
+  const createChat = useCallback(async () => {
 
     try {
 
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  { text: payload.content }
-                ]
-              }
-            ]
-          })
-        }
-      );
+      const { data, error } = await supabase
+        .from("chats")
+        .insert({})
+        .select()
+        .single();
 
-      const data = await response.json();
+      if (error) throw error;
 
-      const aiText =
-        data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-        "Sem resposta da IA.";
+      setChatId(data.id);
 
-      const aiMessage: Message = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: aiText,
-        created_at: new Date().toISOString()
-      };
+    } catch (error) {
 
-      setMessages(prev => [...prev, aiMessage]);
-
-    }
-    catch (error) {
-
-      console.error(error);
-
-      const errorMessage: Message = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: "Erro ao conectar com a IA.",
-        created_at: new Date().toISOString()
-      };
-
-      setMessages(prev => [...prev, errorMessage]);
-
-    }
-    finally {
-
-      setIsLoading(false);
+      console.error("Create chat error:", error);
 
     }
 
   }, []);
 
+  /*
+  ---------------------------------------
+  LOAD MESSAGES
+  ---------------------------------------
+  */
+
+  const loadMessages = useCallback(async (id: string) => {
+
+    try {
+
+      const { data, error } = await supabase
+        .from("messages")
+        .select("*")
+        .eq("chat_id", id)
+        .order("created_at", { ascending: true });
+
+      if (error) throw error;
+
+      setMessages(data || []);
+
+    } catch (error) {
+
+      console.error("Load messages error:", error);
+
+    }
+
+  }, []);
+
+  /*
+  ---------------------------------------
+  INIT
+  ---------------------------------------
+  */
+
+  useEffect(() => {
+
+    createChat();
+
+  }, [createChat]);
+
+  useEffect(() => {
+
+    if (chatId) {
+
+      loadMessages(chatId);
+
+    }
+
+  }, [chatId, loadMessages]);
+
+  /*
+  ---------------------------------------
+  SEND MESSAGE
+  ---------------------------------------
+  */
+
+  const sendMessage = useCallback(async (content: string) => {
+
+    if (!chatId) return;
+
+    try {
+
+      setIsLoading(true);
+
+      /*
+      USER MESSAGE LOCAL
+      */
+
+      const userMessage: Message = {
+
+        id: crypto.randomUUID(),
+
+        role: "user",
+
+        content,
+
+      };
+
+      setMessages(prev => [...prev, userMessage]);
+
+      /*
+      SAVE USER MESSAGE
+      */
+
+      await supabase.from("messages").insert({
+
+        chat_id: chatId,
+
+        role: "user",
+
+        content,
+
+      });
+
+      /*
+      CALL EDGE FUNCTION
+      */
+
+      const { data, error } = await supabase.functions.invoke("chat", {
+
+        body: {
+
+          message: content,
+
+          chat_id: chatId,
+
+        },
+
+      });
+
+      if (error) throw error;
+
+      /*
+      AI MESSAGE LOCAL
+      */
+
+      const aiMessage: Message = {
+
+        id: crypto.randomUUID(),
+
+        role: "assistant",
+
+        content: data?.response || "Erro ao gerar resposta",
+
+      };
+
+      setMessages(prev => [...prev, aiMessage]);
+
+      /*
+      SAVE AI MESSAGE
+      */
+
+      await supabase.from("messages").insert({
+
+        chat_id: chatId,
+
+        role: "assistant",
+
+        content: aiMessage.content,
+
+      });
+
+    } catch (error) {
+
+      console.error("Send message error:", error);
+
+    } finally {
+
+      setIsLoading(false);
+
+    }
+
+  }, [chatId]);
+
+  /*
+  ---------------------------------------
+  RETURN
+  ---------------------------------------
+  */
+
   return {
 
     messages,
+
     sendMessage,
-    isLoading
+
+    isLoading,
 
   };
 

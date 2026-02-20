@@ -1,58 +1,100 @@
-import { useState, useRef } from "react";
-import { Send, ImagePlus } from "lucide-react";
+import { useState, useCallback } from "react";
 
-export interface SendMessagePayload {
-
-  content?: string;
-  imageFile?: File | null;
-
-}
+import { SendHorizonal } from "lucide-react";
 
 interface Props {
 
-  onSend: (payload: SendMessagePayload) => Promise<void>;
-  isLoading: boolean;
+  onSend: (message: string) => Promise<void> | void;
+
+  disabled?: boolean;
 
 }
 
-export function ChatInput({ onSend, isLoading }: Props) {
+export function ChatInput({ onSend, disabled }: Props) {
 
-  const [text, setText] = useState("");
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [value, setValue] = useState("");
 
-  const send = async () => {
+  const [sending, setSending] = useState(false);
 
-    if (!text.trim()) return;
+  const handleSend = useCallback(async () => {
 
-    await onSend({
+    const text = value.trim();
 
-      content: text
+    if (!text) return;
 
-    });
+    if (sending || disabled) return;
 
-    setText("");
+    try {
 
-  };
+      setSending(true);
+
+      await onSend(text);
+
+      setValue("");
+
+    } catch (error) {
+
+      console.error("Send message error:", error);
+
+    } finally {
+
+      setSending(false);
+
+    }
+
+  }, [value, sending, disabled, onSend]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+
+    if (e.key === "Enter" && !e.shiftKey) {
+
+      e.preventDefault();
+
+      handleSend();
+
+    }
+
+  }, [handleSend]);
 
   return (
 
-    <div className="flex gap-2 p-4 border-t">
+    <div className="border-t border-border p-3 bg-background">
 
-      <textarea
+      <div className="flex items-center gap-2">
 
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        className="flex-1 border rounded p-2"
+        <input
 
-      />
+          type="text"
 
-      <button onClick={send} disabled={isLoading}>
+          value={value}
 
-        <Send size={18}/>
+          onChange={(e) => setValue(e.target.value)}
 
-      </button>
+          onKeyDown={handleKeyDown}
 
-      <input hidden type="file" ref={fileRef}/>
+          placeholder="Digite sua mensagem..."
+
+          disabled={disabled || sending}
+
+          className="flex-1 px-4 py-3 rounded-xl bg-muted outline-none focus:ring-2 focus:ring-primary"
+
+        />
+
+        <button
+
+          onClick={handleSend}
+
+          disabled={disabled || sending || !value.trim()}
+
+          className="p-3 rounded-xl bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50"
+
+        >
+
+          <SendHorizonal size={18} />
+
+        </button>
+
+      </div>
 
     </div>
 

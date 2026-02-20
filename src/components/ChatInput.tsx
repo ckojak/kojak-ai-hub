@@ -1,8 +1,5 @@
 import {
   Send,
-  Mic,
-  MicOff,
-  Square,
   ImagePlus,
   X,
 } from "lucide-react";
@@ -11,37 +8,24 @@ import {
   useState,
   useRef,
   useCallback,
-  useEffect,
 } from "react";
-
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { toast } from "@/hooks/use-toast";
 
 export interface SendMessagePayload {
   content?: string;
   imageFile?: File | null;
 }
 
-interface ChatInputProps {
-  onSend: (payload: SendMessagePayload) => Promise<void> | void;
+interface Props {
+  onSend: (payload: SendMessagePayload) => Promise<void>;
   isLoading: boolean;
-
-  voiceTranscript?: string;
-  isListening?: boolean;
-  isSpeaking?: boolean;
-
-  onStartListening?: () => void;
-  onStopListening?: () => void;
-  onStopSpeaking?: () => void;
 
   referenceImage?: string | null;
   onClearReference?: () => void;
 }
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024;
+const MAX_SIZE = 5 * 1024 * 1024;
 
-const ALLOWED_TYPES = [
+const TYPES = [
   "image/png",
   "image/jpeg",
   "image/webp",
@@ -50,125 +34,45 @@ const ALLOWED_TYPES = [
 export function ChatInput({
   onSend,
   isLoading,
-  voiceTranscript,
-  isListening,
-  isSpeaking,
-  onStartListening,
-  onStopListening,
-  onStopSpeaking,
   referenceImage,
   onClearReference,
-}: ChatInputProps) {
+}: Props) {
   const [text, setText] = useState("");
-  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageFile, setImageFile] =
+    useState<File | null>(null);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const isSendingRef = useRef(false);
+  const fileRef =
+    useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (voiceTranscript) {
-      setText(voiceTranscript);
-    }
-  }, [voiceTranscript]);
-
-  const validateFile = useCallback((file: File) => {
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      toast({
-        title: "Formato inválido",
-        description: "Apenas PNG, JPEG e WEBP",
-        variant: "destructive",
-      });
-
+  const validate = (file: File) => {
+    if (!TYPES.includes(file.type))
       return false;
-    }
 
-    if (file.size > MAX_FILE_SIZE) {
-      toast({
-        title: "Imagem muito grande",
-        description: "Máximo 5MB",
-        variant: "destructive",
-      });
-
+    if (file.size > MAX_SIZE)
       return false;
-    }
 
     return true;
-  }, []);
+  };
 
-  const handleSelectImage = useCallback(
-    (file: File) => {
-      if (!validateFile(file)) return;
+  const send = useCallback(async () => {
+    if (!text && !imageFile) return;
 
-      setImageFile(file);
-    },
-    [validateFile]
-  );
+    await onSend({
+      content: text,
+      imageFile,
+    });
 
-  const handleFileChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
+    setText("");
+    setImageFile(null);
+    onClearReference?.();
 
-      handleSelectImage(file);
-
-      e.target.value = "";
-    },
-    [handleSelectImage]
-  );
-
-  const handleSend = useCallback(async () => {
-    if (isSendingRef.current) return;
-
-    if (!text.trim() && !imageFile && !referenceImage)
-      return;
-
-    isSendingRef.current = true;
-
-    try {
-      await onSend({
-        content: text.trim(),
-        imageFile,
-      });
-
-      setText("");
-      setImageFile(null);
-
-      onClearReference?.();
-
-    } catch (err) {
-      console.error(err);
-
-      toast({
-        title: "Erro ao enviar",
-        variant: "destructive",
-      });
-
-    } finally {
-      isSendingRef.current = false;
-    }
-  }, [
-    text,
-    imageFile,
-    referenceImage,
-    onSend,
-    onClearReference,
-  ]);
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        handleSend();
-      }
-    },
-    [handleSend]
-  );
+  }, [text, imageFile, onSend, onClearReference]);
 
   return (
-    <div className="border-t border-white/10 p-3 space-y-2">
+    <div>
 
       {(imageFile || referenceImage) && (
-        <div className="relative w-fit">
+        <div>
 
           <img
             src={
@@ -176,7 +80,7 @@ export function ChatInput({
                 ? URL.createObjectURL(imageFile)
                 : referenceImage!
             }
-            className="w-20 h-20 rounded-lg object-cover"
+            width={80}
           />
 
           <button
@@ -184,9 +88,8 @@ export function ChatInput({
               setImageFile(null);
               onClearReference?.();
             }}
-            className="absolute -top-2 -right-2 bg-black rounded-full p-1"
           >
-            <X size={14} />
+            <X />
           </button>
 
         </div>
@@ -194,74 +97,45 @@ export function ChatInput({
 
       <div className="flex gap-2">
 
-        <Textarea
+        <textarea
           value={text}
           onChange={(e) =>
             setText(e.target.value)
           }
-          onKeyDown={handleKeyDown}
-          placeholder="Digite sua mensagem..."
-          className="resize-none"
         />
 
-        <div className="flex flex-col gap-2">
+        <button
+          onClick={() =>
+            fileRef.current?.click()
+          }
+        >
+          <ImagePlus />
+        </button>
 
-          <Button
-            size="icon"
-            variant="secondary"
-            onClick={() =>
-              fileInputRef.current?.click()
-            }
-          >
-            <ImagePlus size={18} />
-          </Button>
-
-          {isListening ? (
-            <Button
-              size="icon"
-              variant="destructive"
-              onClick={onStopListening}
-            >
-              <MicOff size={18} />
-            </Button>
-          ) : (
-            <Button
-              size="icon"
-              variant="secondary"
-              onClick={onStartListening}
-            >
-              <Mic size={18} />
-            </Button>
-          )}
-
-          {isSpeaking && (
-            <Button
-              size="icon"
-              variant="destructive"
-              onClick={onStopSpeaking}
-            >
-              <Square size={18} />
-            </Button>
-          )}
-
-          <Button
-            size="icon"
-            onClick={handleSend}
-            disabled={isLoading}
-          >
-            <Send size={18} />
-          </Button>
-
-        </div>
+        <button
+          onClick={send}
+          disabled={isLoading}
+        >
+          <Send />
+        </button>
 
       </div>
 
       <input
         type="file"
-        accept="image/png,image/jpeg,image/webp"
         hidden
-        ref={fileInputRef}
-        onChange={handleFileChange}
+        ref={fileRef}
+        onChange={(e) => {
+          const file =
+            e.target.files?.[0];
+
+          if (!file) return;
+
+          if (!validate(file))
+            return;
+
+          setImageFile(file);
+        }}
       />
 
     </div>

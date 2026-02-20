@@ -4,6 +4,12 @@ import { useVoice } from "@/hooks/useVoice";
 
 export default function Index() {
 
+  /*
+  ---------------------------------------
+  CHAT HOOK
+  ---------------------------------------
+  */
+
   const {
 
     messages,
@@ -12,22 +18,51 @@ export default function Index() {
 
   } = useChats();
 
+  /*
+  ---------------------------------------
+  VOICE HOOK
+  ---------------------------------------
+  */
+
   const {
 
     speak
 
   } = useVoice();
 
+  /*
+  ---------------------------------------
+  SAFETY FALLBACKS (PREVINE TELA PRETA)
+  ---------------------------------------
+  */
+
+  const safeMessages = messages ?? [];
+
+  const safeSendMessage = sendMessage ?? (async () => {});
+
+  const safeSpeak = speak ?? (() => {});
+
+  const safeLoading = isLoading ?? false;
+
+  /*
+  ---------------------------------------
+  UI
+  ---------------------------------------
+  */
+
   return (
 
-    <div className="h-screen">
+    <div className="h-screen w-full bg-background text-foreground">
 
       <ChatArea
 
-        messages={messages}
-        isLoading={isLoading}
-        onSendMessage={sendMessage}
-        onSpeak={speak}
+        messages={safeMessages}
+
+        isLoading={safeLoading}
+
+        onSendMessage={safeSendMessage}
+
+        onSpeak={safeSpeak}
 
       />
 

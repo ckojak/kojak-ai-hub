@@ -10,10 +10,6 @@ import {
 
 import { memo, useState, useCallback } from "react";
 
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import rehypeSanitize from "rehype-sanitize";
-
 export interface Message {
   id: string;
   role: "user" | "assistant";
@@ -34,18 +30,22 @@ export const ChatMessage = memo(function ChatMessage({
   onSpeak,
   onSelectReference,
 }: Props) {
+
   const [copied, setCopied] = useState(false);
 
   const isUser = message.role === "user";
 
   const copy = useCallback(async () => {
+
     await navigator.clipboard.writeText(message.content);
     setCopied(true);
 
     setTimeout(() => setCopied(false), 2000);
+
   }, [message.content]);
 
   const download = useCallback(async () => {
+
     if (!message.media_url) return;
 
     const res = await fetch(message.media_url);
@@ -59,63 +59,65 @@ export const ChatMessage = memo(function ChatMessage({
     a.click();
 
     URL.revokeObjectURL(url);
+
   }, [message.media_url]);
 
   return (
-    <div
-      className={`flex gap-3 ${
-        isUser ? "flex-row-reverse" : ""
-      }`}
-    >
+
+    <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
+
       <div>
         {isUser ? <User /> : <Sparkles />}
       </div>
 
       <div className="max-w-[75%]">
 
-        {message.type === "image" &&
-          message.media_url && (
-            <div className="relative group">
+        {message.type === "image" && message.media_url && (
 
-              <img
-                src={message.media_url}
-                className="rounded-xl"
-              />
+          <div className="relative group">
 
-              {!isUser && (
-                <div className="opacity-0 group-hover:opacity-100 absolute inset-0 bg-black/60 flex gap-2 justify-center items-center">
+            <img
+              src={message.media_url}
+              className="rounded-xl"
+              alt="generated"
+            />
 
-                  <button onClick={download}>
-                    <Download />
+            {!isUser && (
+
+              <div className="opacity-0 group-hover:opacity-100 absolute inset-0 bg-black/60 flex gap-2 justify-center items-center">
+
+                <button onClick={download}>
+                  <Download />
+                </button>
+
+                {onSelectReference && (
+                  <button
+                    onClick={() =>
+                      onSelectReference(message.media_url!)
+                    }
+                  >
+                    <ImagePlus />
                   </button>
+                )}
 
-                  {onSelectReference && (
-                    <button
-                      onClick={() =>
-                        onSelectReference(
-                          message.media_url!
-                        )
-                      }
-                    >
-                      <ImagePlus />
-                    </button>
-                  )}
+              </div>
 
-                </div>
-              )}
-            </div>
-          )}
+            )}
+
+          </div>
+
+        )}
 
         {message.content && (
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            rehypePlugins={[rehypeSanitize]}
-          >
+
+          <div className="whitespace-pre-wrap break-words">
             {message.content}
-          </ReactMarkdown>
+          </div>
+
         )}
 
         {!isUser && (
+
           <div className="flex gap-2 mt-1">
 
             <button onClick={copy}>
@@ -123,19 +125,19 @@ export const ChatMessage = memo(function ChatMessage({
             </button>
 
             {onSpeak && (
-              <button
-                onClick={() =>
-                  onSpeak(message.content)
-                }
-              >
+              <button onClick={() => onSpeak(message.content)}>
                 <Volume2 />
               </button>
             )}
 
           </div>
+
         )}
 
       </div>
+
     </div>
+
   );
+
 });

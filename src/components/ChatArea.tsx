@@ -1,70 +1,66 @@
-import { useRef, useEffect, useCallback } from "react";
-import { ChatMessage, Message } from "./ChatMessage";
-import { ChatInput } from "./ChatInput";
-import { TypingIndicator } from "./TypingIndicator";
+import { useRef, useEffect } from "react";
 
-interface ChatAreaProps {
+import {
+  ChatMessage,
+  Message,
+} from "./ChatMessage";
+
+import {
+  ChatInput,
+  SendMessagePayload,
+} from "./ChatInput";
+
+interface Props {
   messages: Message[];
   isLoading: boolean;
-  activeMode: string;
-  onModeChange: (mode: string) => void;
-  onSendMessage: any;
-  voiceTranscript?: string;
-  isListening?: boolean;
-  isSpeaking?: boolean;
-  onStartListening?: () => void;
-  onStopListening?: () => void;
+
+  onSendMessage: (
+    payload: SendMessagePayload
+  ) => Promise<void>;
+
   onSpeak?: (text: string) => void;
-  onStopSpeaking?: () => void;
+
   referenceImage?: string | null;
-  onSelectReference?: (url: string) => void;
   onClearReference?: () => void;
 }
 
-export function ChatArea(props: ChatAreaProps) {
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({
-      behavior: "smooth",
-    });
-  }, []);
+export function ChatArea({
+  messages,
+  isLoading,
+  onSendMessage,
+  onSpeak,
+  referenceImage,
+  onClearReference,
+}: Props) {
+  const ref =
+    useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [props.messages, props.isLoading, scrollToBottom]);
+    ref.current?.scrollIntoView();
+  }, [messages]);
 
   return (
     <div className="flex flex-col h-full">
 
       <div className="flex-1 overflow-y-auto">
-        {props.messages.map((message) => (
+
+        {messages.map((m) => (
           <ChatMessage
-            key={message.id}
-            message={message}
-            onSpeak={props.onSpeak}
-            onSelectReference={props.onSelectReference}
+            key={m.id}
+            message={m}
+            onSpeak={onSpeak}
           />
         ))}
 
-        {props.isLoading && <TypingIndicator />}
+        <div ref={ref} />
 
-        <div ref={messagesEndRef} />
       </div>
 
       <ChatInput
-        onSend={props.onSendMessage}
-        isLoading={props.isLoading}
-        activeMode={props.activeMode}
-        onModeChange={props.onModeChange}
-        voiceTranscript={props.voiceTranscript}
-        isListening={props.isListening}
-        isSpeaking={props.isSpeaking}
-        onStartListening={props.onStartListening}
-        onStopListening={props.onStopListening}
-        onStopSpeaking={props.onStopSpeaking}
-        referenceImage={props.referenceImage}
-        onClearReference={props.onClearReference}
+        onSend={onSendMessage}
+        isLoading={isLoading}
+        referenceImage={referenceImage}
+        onClearReference={onClearReference}
       />
 
     </div>

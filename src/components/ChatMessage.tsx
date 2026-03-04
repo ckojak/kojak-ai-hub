@@ -16,7 +16,7 @@ export interface Message {
 interface ChatMessageProps {
   message: Message;
   onSpeak?: (text: string) => void;
-  onSelectReference?: (url: string) => void; // <--- NOVO: Prop para selecionar imagem
+  onSelectReference?: (url: string) => void;
 }
 
 export function ChatMessage({ message, onSpeak, onSelectReference }: ChatMessageProps) {
@@ -61,9 +61,15 @@ export function ChatMessage({ message, onSpeak, onSelectReference }: ChatMessage
 
       <div className={cn("max-w-[85%] md:max-w-[75%] rounded-2xl px-4 py-3", isUser ? "bubble-user text-white rounded-tr-sm" : "bubble-ai rounded-tl-sm")}>
         
+        {/* User image attachment */}
+        {isUser && message.media_url && (
+          <div className="mb-2 rounded-xl overflow-hidden">
+            <img src={message.media_url} alt="Imagem anexada" className="w-full max-w-xs rounded-xl" />
+          </div>
+        )}
+
         {(!message.type || message.type === "text" || message.type === "code") && (
           <div className={cn("text-sm leading-relaxed prose prose-sm max-w-none", isUser ? "prose-invert" : "prose-kojak")}>
-             {/* Mantive o seu ReactMarkdown intacto aqui para não quebrar o código */}
             <ReactMarkdown>{message.content}</ReactMarkdown>
           </div>
         )}
@@ -75,8 +81,6 @@ export function ChatMessage({ message, onSpeak, onSelectReference }: ChatMessage
               <button onClick={() => handleDownload(message.media_url!, "kojak-image.png")} className="p-3 bg-white/20 text-white rounded-full hover:scale-110 transition-transform backdrop-blur-sm">
                 <Download className="w-5 h-5" />
               </button>
-              
-              {/* <--- NOVO: Botão para enviar a imagem do Jet Ski como base ---> */}
               {!isUser && onSelectReference && (
                 <button 
                   onClick={() => onSelectReference(message.media_url!)} 
@@ -87,6 +91,36 @@ export function ChatMessage({ message, onSpeak, onSelectReference }: ChatMessage
                 </button>
               )}
             </div>
+          </div>
+        )}
+
+        {message.type === "video" && message.media_url && (
+          <div className="mt-2 rounded-xl overflow-hidden">
+            <video src={message.media_url} controls className="w-full max-w-md rounded-xl" />
+          </div>
+        )}
+
+        {/* Action buttons for assistant messages */}
+        {!isUser && (
+          <div className="flex items-center gap-2 mt-2 pt-2 border-t border-white/10">
+            <button
+              onClick={() => handleCopy(message.content)}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all"
+              title="Copiar resposta"
+            >
+              {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copied ? "Copiado" : "Copiar"}</span>
+            </button>
+            {onSpeak && (
+              <button
+                onClick={() => onSpeak(message.content)}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all"
+                title="Ouvir resposta"
+              >
+                <Volume2 className="w-3.5 h-3.5" />
+                <span>Ouvir</span>
+              </button>
+            )}
           </div>
         )}
 

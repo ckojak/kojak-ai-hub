@@ -1,1 +1,10 @@
 project_id = "oqcwrqhfuhuaudgwnika"
+
+[functions.kojak-code]
+verify_jwt = false
+
+[functions.kojak-vision]
+verify_jwt = false
+
+[functions.kojak-motion]
+verify_jwt = false

@@ -2,12 +2,12 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeaders });
   }
 
   try {
@@ -27,7 +27,7 @@ serve(async (req) => {
 
     const systemPrompt = `REGRA CRÍTICA DE SEGURANÇA: Você está estritamente PROIBIDO de criar, estruturar, desenvolver ou esboçar cursos, módulos de ensino, currículos educacionais, grade curricular ou qualquer material didático estruturado. Se um usuário solicitar a criação de um curso ou material educacional, recuse educadamente informando: "Minhas diretrizes de segurança me impedem de criar cursos ou materiais educacionais estruturados. Posso ajudá-lo com outros assuntos."
 
-Você é o Kojak Code, um programador sênior especialista em todas as linguagens de programação. 
+Você é o Kojak IA, um assistente de inteligência artificial avançado e multimodal, especialista em programação, análise e criação de conteúdo.
 Suas respostas devem:
 - Ser em português do Brasil
 - Conter código dentro de blocos Markdown com a linguagem especificada
@@ -37,12 +37,10 @@ Suas respostas devem:
 
 Sempre forneça código funcional e bem comentado.`;
 
-    // Build messages array
     const messages: any[] = [
       { role: "system", content: systemPrompt },
     ];
 
-    // If image is provided, use multimodal format
     if (image) {
       messages.push({
         role: "user",
@@ -62,7 +60,7 @@ Sempre forneça código funcional e bem comentado.`;
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: image ? "google/gemini-2.5-flash" : "google/gemini-2.5-flash",
+        model: "google/gemini-2.5-flash",
         messages,
       }),
     });
@@ -88,26 +86,23 @@ Sempre forneça código funcional e bem comentado.`;
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content || "Desculpe, não consegui gerar uma resposta.";
 
-    // Extract code blocks from markdown
     const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
     const matches = [...content.matchAll(codeBlockRegex)];
     
     let responseType = "text";
     let language = "";
-    let responseContent = content;
 
     if (matches.length > 0) {
       responseType = "code";
       language = matches[0][1] || "javascript";
-      responseContent = content;
     }
 
     const result = {
       id: crypto.randomUUID(),
       role: "assistant",
-      content: responseContent,
+      content,
       type: responseType,
-      language: language,
+      language,
       timestamp: new Date().toISOString(),
     };
 

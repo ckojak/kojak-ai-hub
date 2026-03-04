@@ -2,12 +2,12 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeaders });
   }
 
   try {
@@ -24,14 +24,13 @@ serve(async (req) => {
     if (!REPLICATE_API_TOKEN) {
       return new Response(
         JSON.stringify({ 
-          error: "REPLICATE_API_TOKEN não configurado. Por favor, configure sua chave API do Replicate.",
+          error: "O modo Motion requer a configuração da chave API do Replicate. Entre em contato com o administrador.",
           requiresSetup: true 
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Create prediction with Luma Ray model
     const createResponse = await fetch("https://api.replicate.com/v1/predictions", {
       method: "POST",
       headers: {
@@ -41,7 +40,7 @@ serve(async (req) => {
       body: JSON.stringify({
         version: "8cc2a41c06fb2a20f79fda3db25cdee70da8a0bcde0a1c6cdabec8d1b3c9dde2",
         input: {
-          prompt: prompt,
+          prompt,
           aspect_ratio: "16:9",
           loop: false,
         },
@@ -56,49 +55,37 @@ serve(async (req) => {
 
     const prediction = await createResponse.json();
     
-    // Poll for completion
     let result = prediction;
     let attempts = 0;
-    const maxAttempts = 120; // 10 minutes max (5 seconds * 120)
+    const maxAttempts = 120;
 
     while (result.status !== "succeeded" && result.status !== "failed" && attempts < maxAttempts) {
-      await new Promise((resolve) => setTimeout(resolve, 5000)); // Wait 5 seconds
+      await new Promise((resolve) => setTimeout(resolve, 5000));
       
       const statusResponse = await fetch(`https://api.replicate.com/v1/predictions/${result.id}`, {
-        headers: {
-          Authorization: `Bearer ${REPLICATE_API_TOKEN}`,
-        },
+        headers: { Authorization: `Bearer ${REPLICATE_API_TOKEN}` },
       });
       
-      if (!statusResponse.ok) {
-        throw new Error("Erro ao verificar status do vídeo");
-      }
+      if (!statusResponse.ok) throw new Error("Erro ao verificar status do vídeo");
       
       result = await statusResponse.json();
       attempts++;
     }
 
-    if (result.status === "failed") {
-      throw new Error(result.error || "Falha na geração do vídeo");
-    }
-
-    if (result.status !== "succeeded") {
-      throw new Error("Tempo limite excedido na geração do vídeo");
-    }
+    if (result.status === "failed") throw new Error(result.error || "Falha na geração do vídeo");
+    if (result.status !== "succeeded") throw new Error("Tempo limite excedido na geração do vídeo");
 
     const videoUrl = result.output;
 
-    const response = {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content: "Vídeo gerado com sucesso! Confira o resultado abaixo:",
-      type: "video",
-      mediaUrl: videoUrl,
-      timestamp: new Date().toISOString(),
-    };
-
     return new Response(
-      JSON.stringify(response),
+      JSON.stringify({
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: "Vídeo gerado com sucesso! Confira o resultado abaixo:",
+        type: "video",
+        mediaUrl: videoUrl,
+        timestamp: new Date().toISOString(),
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {

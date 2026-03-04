@@ -2,16 +2,15 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    // 1. ALTERAÇÃO CIRÚRGICA: Agora extrai o texto E as duas imagens
     const { prompt, image, reference_image } = await req.json();
 
     if (!prompt && !image && !reference_image) {
@@ -26,33 +25,27 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY não está configurada");
     }
 
-    // 2. LÓGICA MULTIMODAL: Prepara a mensagem dependendo do que você enviou
     let messageContent: any = `Crie uma imagem profissional e de alta qualidade: ${prompt}. Ultra high resolution, professional photography.`;
 
-    // Se tiver imagem (Face Swap ou Edição), muda para o formato Array que a API exige
     if (image || reference_image) {
       messageContent = [];
       
-      // Imagem Alvo (O Jet Ski)
       if (reference_image) {
         messageContent.push({ type: "text", text: "Use esta imagem como ALVO base da composição:" });
         messageContent.push({ type: "image_url", image_url: { url: reference_image } });
       }
       
-      // Imagem Fonte (O seu Rosto)
       if (image) {
         messageContent.push({ type: "text", text: "Use esta imagem como FONTE (ex: extrair o rosto/elemento e aplicar no alvo):" });
         messageContent.push({ type: "image_url", image_url: { url: image } });
       }
 
-      // O Texto do Comando
       messageContent.push({ 
         type: "text", 
         text: `Instrução estrita de edição: ${prompt || 'Faça a fusão realista destas imagens.'} Ultra high resolution, photorealistic blending, seamless integration.` 
       });
     }
 
-    // Disparo para o Gateway da Lovable
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -62,10 +55,7 @@ serve(async (req) => {
       body: JSON.stringify({
         model: "google/gemini-3-pro-image-preview",
         messages: [
-          { 
-            role: "user", 
-            content: messageContent 
-          }
+          { role: "user", content: messageContent }
         ],
         modalities: ["image", "text"],
       }),
@@ -91,7 +81,6 @@ serve(async (req) => {
 
     const data = await response.json();
     
-    // Extrai a imagem final gerada
     const imageData = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
     const textContent = data.choices?.[0]?.message?.content || "Edição concluída com sucesso!";
 

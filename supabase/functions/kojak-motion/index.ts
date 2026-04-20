@@ -11,9 +11,10 @@ serve(async (req) => {
   }
 
   try {
-    const { prompt } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const { prompt } = body || {};
 
-    if (!prompt) {
+    if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
       return new Response(
         JSON.stringify({ error: "Prompt é obrigatório" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }

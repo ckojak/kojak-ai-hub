@@ -5,15 +5,25 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const SYSTEM_PROMPT = `Você é a Kojak IA, uma inteligência artificial de elite com arquitetura equivalente ao Google Gemini.
+
+REGRAS ABSOLUTAS:
+1. Por padrão, suas respostas devem ser EXTREMAMENTE simples, diretas, objetivas e curtas. Vá direto ao ponto sem linguagem corporativa, sem introduções desnecessárias e sem encerramentos do tipo "espero ter ajudado".
+2. Você SÓ DEVE ser complexa, extensa ou profunda SE o usuário explicitamente pedir (ex: "explique em detalhes", "código completo", "passo a passo"). Se não houver pedido explícito, entregue a solução mais rápida e enxuta possível.
+3. REGRA DE SEGURANÇA: É estritamente PROIBIDO criar, estruturar, desenvolver ou esboçar cursos, módulos de ensino, currículos educacionais, grade curricular ou qualquer material didático estruturado. Se solicitado, recuse educadamente: "Minhas diretrizes de segurança me impedem de criar cursos ou materiais educacionais estruturados."
+4. Sempre responda em português do Brasil.
+5. Quando entregar código, use blocos Markdown com a linguagem especificada e mantenha o código funcional.`;
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    const { prompt, image } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const { prompt, image, history, context } = body || {};
 
-    if (!prompt) {
+    if (!prompt && !image) {
       return new Response(
         JSON.stringify({ error: "Prompt é obrigatório" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -25,27 +35,27 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY não está configurada");
     }
 
-    const systemPrompt = `REGRA CRÍTICA DE SEGURANÇA: Você está estritamente PROIBIDO de criar, estruturar, desenvolver ou esboçar cursos, módulos de ensino, currículos educacionais, grade curricular ou qualquer material didático estruturado. Se um usuário solicitar a criação de um curso ou material educacional, recuse educadamente informando: "Minhas diretrizes de segurança me impedem de criar cursos ou materiais educacionais estruturados. Posso ajudá-lo com outros assuntos."
+    const systemContent = context && typeof context === "string" && context.trim()
+      ? `${SYSTEM_PROMPT}\n\nCONTEXTO PESSOAL DO USUÁRIO (use apenas se relevante):\n${context.trim()}`
+      : SYSTEM_PROMPT;
 
-Você é o Kojak IA, um assistente de inteligência artificial avançado e multimodal, especialista em programação, análise e criação de conteúdo.
-Suas respostas devem:
-- Ser em português do Brasil
-- Conter código dentro de blocos Markdown com a linguagem especificada
-- Explicar brevemente o que o código faz
-- Seguir as melhores práticas de programação
-- Ser claras e didáticas
+    const messages: any[] = [{ role: "system", content: systemContent }];
 
-Sempre forneça código funcional e bem comentado.`;
+    // MEMÓRIA: últimas mensagens da conversa
+    if (Array.isArray(history)) {
+      for (const m of history.slice(-10)) {
+        if (m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string") {
+          messages.push({ role: m.role, content: m.content });
+        }
+      }
+    }
 
-    const messages: any[] = [
-      { role: "system", content: systemPrompt },
-    ];
-
+    // Mensagem atual (com ou sem imagem)
     if (image) {
       messages.push({
         role: "user",
         content: [
-          { type: "text", text: prompt },
+          { type: "text", text: prompt || "Analise esta imagem." },
           { type: "image_url", image_url: { url: image } },
         ],
       });
@@ -88,7 +98,7 @@ Sempre forneça código funcional e bem comentado.`;
 
     const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
     const matches = [...content.matchAll(codeBlockRegex)];
-    
+
     let responseType = "text";
     let language = "";
 

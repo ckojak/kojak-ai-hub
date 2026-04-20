@@ -145,7 +145,7 @@ const Index = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [user, currentChat, createChat, addMessage, updateChatTitle, dbMessages, profile, toast, logActivity, referenceImage]);
+  }, [user, currentChat, createChat, addMessage, updateChatTitle, dbMessages, profile, toast, logActivity, referenceImage, localMessages.length, messages]);
 
   const handleNewChat = useCallback(async () => {
     if (user) await createChat(activeMode);

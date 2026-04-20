@@ -14,6 +14,21 @@ export type Database = {
   }
   public: {
     Tables: {
+      _kojak_configs: {
+        Row: {
+          key: string
+          value: string
+        }
+        Insert: {
+          key: string
+          value: string
+        }
+        Update: {
+          key?: string
+          value?: string
+        }
+        Relationships: []
+      }
       activity_log: {
         Row: {
           action: string
@@ -88,6 +103,33 @@ export type Database = {
           connected_at?: string
           id?: string
           status?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      conversations: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          title: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          title?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          title?: string | null
+          updated_at?: string
           user_id?: string
         }
         Relationships: []

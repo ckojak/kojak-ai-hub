@@ -75,14 +75,20 @@ const Index = () => {
     try {
       const config = modeConfig[mode] || modeConfig.chat;
       const personalContext = profile?.personal_context || "";
-      const promptWithContext = personalContext ? `[Contexto do usuário: ${personalContext}]\n\n${content}` : content;
-      
-      // <--- NOVO: Disparo duplo de imagens para a IA --->
+
+      // MEMÓRIA: últimas 10 mensagens já existentes (exclui a recém adicionada localmente)
+      const recentHistory = messages.slice(-10).map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
+
       const { data, error } = await supabase.functions.invoke(config.function, {
-        body: { 
-          prompt: promptWithContext, 
-          image: imageUrl,                // A foto que você subiu (Seu rosto)
-          reference_image: referenceImage // A foto que você clicou no histórico (Jet Ski)
+        body: {
+          prompt: content,
+          context: personalContext,
+          history: recentHistory,
+          image: imageUrl,
+          reference_image: referenceImage,
         },
       });
 

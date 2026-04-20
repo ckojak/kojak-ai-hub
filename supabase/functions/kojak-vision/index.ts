@@ -11,11 +11,16 @@ serve(async (req) => {
   }
 
   try {
-    const { prompt, image, reference_image } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const { prompt, image, reference_image, context } = body || {};
 
-    if (!prompt && !image && !reference_image) {
+    const safePrompt = typeof prompt === "string" ? prompt.trim() : "";
+    const hasImage = typeof image === "string" && image.length > 0;
+    const hasReference = typeof reference_image === "string" && reference_image.length > 0;
+
+    if (!safePrompt && !hasImage && !hasReference) {
       return new Response(
-        JSON.stringify({ error: "Prompt ou imagem é obrigatório" }),
+        JSON.stringify({ error: "Forneça um prompt ou ao menos uma imagem." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -25,25 +30,42 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY não está configurada");
     }
 
-    let messageContent: any = `Crie uma imagem profissional e de alta qualidade: ${prompt}. Ultra high resolution, professional photography.`;
+    // Construção blindada do conteúdo
+    let messageContent: any;
 
-    if (image || reference_image) {
+    if (!hasImage && !hasReference) {
+      // Geração pura por texto (One-Shot)
+      messageContent = `Crie uma imagem profissional e de alta qualidade: ${safePrompt}. Ultra high resolution, professional photography.`;
+    } else {
       messageContent = [];
-      
-      if (reference_image) {
-        messageContent.push({ type: "text", text: "Use esta imagem como ALVO base da composição:" });
-        messageContent.push({ type: "image_url", image_url: { url: reference_image } });
-      }
-      
-      if (image) {
-        messageContent.push({ type: "text", text: "Use esta imagem como FONTE (ex: extrair o rosto/elemento e aplicar no alvo):" });
-        messageContent.push({ type: "image_url", image_url: { url: image } });
-      }
 
-      messageContent.push({ 
-        type: "text", 
-        text: `Instrução estrita de edição: ${prompt || 'Faça a fusão realista destas imagens.'} Ultra high resolution, photorealistic blending, seamless integration.` 
-      });
+      if (hasReference && hasImage) {
+        // Face Swap / Composição entre 2 imagens
+        messageContent.push({ type: "text", text: "IMAGEM ALVO (base da composição):" });
+        messageContent.push({ type: "image_url", image_url: { url: reference_image } });
+        messageContent.push({ type: "text", text: "IMAGEM FONTE (extrair elemento, ex: rosto, e aplicar no alvo):" });
+        messageContent.push({ type: "image_url", image_url: { url: image } });
+        messageContent.push({
+          type: "text",
+          text: `Instrução: ${safePrompt || "Faça a fusão fotorrealista das imagens, mantendo a composição da imagem ALVO e integrando o elemento principal da imagem FONTE."} Ultra high resolution, photorealistic blending, seamless integration.`,
+        });
+      } else if (hasReference) {
+        // One-Shot com imagem base de referência
+        messageContent.push({ type: "text", text: "Use esta imagem como referência base:" });
+        messageContent.push({ type: "image_url", image_url: { url: reference_image } });
+        messageContent.push({
+          type: "text",
+          text: `Crie uma nova cena/imagem mantendo o estilo e composição da referência. Instrução: ${safePrompt || "Recrie em alta qualidade."} Ultra high resolution.`,
+        });
+      } else if (hasImage) {
+        // Edição direta de uma imagem enviada
+        messageContent.push({ type: "text", text: "Edite/transforme esta imagem:" });
+        messageContent.push({ type: "image_url", image_url: { url: image } });
+        messageContent.push({
+          type: "text",
+          text: `Instrução: ${safePrompt || "Melhore qualidade e detalhes."} Ultra high resolution, photorealistic.`,
+        });
+      }
     }
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -54,9 +76,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         model: "google/gemini-3-pro-image-preview",
-        messages: [
-          { role: "user", content: messageContent }
-        ],
+        messages: [{ role: "user", content: messageContent }],
         modalities: ["image", "text"],
       }),
     });
@@ -80,25 +100,22 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    
     const imageData = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-    const textContent = data.choices?.[0]?.message?.content || "Edição concluída com sucesso!";
+    const textContent = data.choices?.[0]?.message?.content || "Imagem gerada com sucesso.";
 
     if (!imageData) {
       throw new Error("A IA processou, mas não retornou a imagem final.");
     }
 
-    const result = {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content: textContent,
-      type: "image",
-      mediaUrl: imageData,
-      timestamp: new Date().toISOString(),
-    };
-
     return new Response(
-      JSON.stringify(result),
+      JSON.stringify({
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: textContent,
+        type: "image",
+        mediaUrl: imageData,
+        timestamp: new Date().toISOString(),
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {

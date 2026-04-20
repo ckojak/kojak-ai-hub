@@ -58,6 +58,13 @@ const Index = () => {
       await addMessage("user", content, imageUrl ? "image" : "text", imageUrl);
       await logActivity(`Mensagem enviada no modo ${mode}`, { preview: content.slice(0, 100) });
     } else {
+      // Visitante: avisa uma vez que histórico só é salvo após login
+      if (localMessages.length === 0) {
+        toast({
+          title: "Faça login para salvar suas conversas",
+          description: "Sem login, esta conversa será perdida ao recarregar a página.",
+        });
+      }
       const userMessage: Message = {
         id: Date.now().toString(),
         chat_id: "local",

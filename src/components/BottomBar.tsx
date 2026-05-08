@@ -1,4 +1,4 @@
-import { Code2, Camera, Play, MessageCircle, History, Settings } from "lucide-react";
+import { Code2, Camera, Play, MessageCircle, History, Settings, HeartPulse } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface BottomBarProps {
@@ -13,6 +13,7 @@ const modes = [
   { id: "code", label: "Code", icon: Code2 },
   { id: "vision", label: "Vision", icon: Camera },
   { id: "motion", label: "Motion", icon: Play },
+  { id: "saude", label: "Saúde", icon: HeartPulse },
 ];
 
 export function BottomBar({ activeMode, onModeChange, onOpenHistory, onOpenSettings }: BottomBarProps) {

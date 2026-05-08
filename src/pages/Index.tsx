@@ -16,6 +16,7 @@ const modeConfig: Record<string, { function: string }> = {
   code: { function: "kojak-code" },
   vision: { function: "kojak-vision" },
   motion: { function: "kojak-motion" },
+  saude: { function: "kojak-saude" },
 };
 
 const Index = () => {

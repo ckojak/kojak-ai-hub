@@ -54,7 +54,9 @@ const suggestions: Record<string, string[]> = {
   ],
   saude: [
     "Protocolos de biossegurança em UBS",
-    "Estratégias de neutralização vi
+    "Estratégias de neutralização viral com íons de zinco",
+    "Terapia fotodinâmica aplicada em campo",
+  ],
 
 function EmptyState({ mode, onSuggestionClick }: { mode: string; onSuggestionClick: (text: string) => void }) {
   const info = modeInfo[mode as keyof typeof modeInfo] || modeInfo.chat;

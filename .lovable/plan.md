@@ -1,66 +1,88 @@
 
+# Plano: Kojak IA 2026 — Upgrade Completo
 
-## Plano: Deploy das Edge Functions, Setup de Storage e Validação Completa
+O Cloud esta pausado. Vou reativa-lo e depois atualizar toda a stack para o padrao 2026 com streaming, multimodal, voz profissional e modelo mais recente.
 
-Vou reativar a infraestrutura Cloud, fazer deploy das 3 Edge Functions atualizadas, criar o bucket de storage e validar tudo com testes reais (memória conversacional, tom Gemini, e os 3 cenários do Kojak Vision).
+---
 
-### Etapa 1 — Infraestrutura Supabase
+## Etapa 1 — Reativar Cloud e confirmar saude
 
-1. **Migration do bucket de storage** (`chat-attachments`):
-   - Criar bucket público `chat-attachments`
-   - RLS policy: usuários autenticados podem fazer upload
-   - RLS policy: leitura pública para servir as imagens nos chats
+- Chamar `supabase--restart` para reativar o backend
+- Confirmar `ACTIVE_HEALTHY` antes de prosseguir
+- Verificar que `LOVABLE_API_KEY` existe
 
-2. **Deploy das 3 Edge Functions** já refatoradas:
-   - `kojak-code` (chat + código + multimodal com persona Gemini)
-   - `kojak-vision` (4 cenários: texto puro, edição, referência, face swap)
-   - `kojak-motion` (geração de vídeo via Replicate)
+## Etapa 2 — Atualizar Edge Functions para 2026
 
-### Etapa 2 — Validação automatizada via curl
+### kojak-code (Chat principal)
+- Modelo: `google/gemini-2.5-flash` -> `google/gemini-3-flash-preview`
+- **Streaming**: migrar de resposta JSON unica para AI SDK `streamText` + `toUIMessageStreamResponse`
+- Usar `npm:ai` e `npm:@ai-sdk/openai-compatible` com o helper `createLovableAiGatewayProvider`
+- Manter system prompt, memoria conversacional e guardrail de cursos
 
-Vou disparar chamadas reais nas funções deployadas:
+### kojak-saude
+- Mesmo upgrade: modelo `gemini-3-flash-preview` + streaming
 
-| Teste | Função | Payload | O que valida |
-|---|---|---|---|
-| 1 | `kojak-code` | prompt curto sem history | Tom Gemini (resposta curta/direta) |
-| 2 | `kojak-code` | prompt + history de 3 mensagens | Memória conversacional |
-| 3 | `kojak-code` | "crie um curso de Python" | Guardrail de segurança (deve recusar) |
-| 4 | `kojak-vision` | só `prompt` | Geração one-shot por texto |
-| 5 | `kojak-vision` | `prompt` + `image` | Edição de imagem |
-| 6 | `kojak-vision` | `prompt` + `image` + `reference_image` | Face swap / composição |
+### kojak-vision
+- Modelo ja usa `gemini-3-pro-image-preview` (OK)
+- Manter sem streaming (retorna imagem, nao texto)
 
-### Etapa 3 — Análise de logs e correções pontuais
+### kojak-motion
+- Manter como esta (depende de Replicate)
 
-- Ler logs de cada função após os testes (`supabase--edge_function_logs`)
-- Se algum cenário falhar, aplicar correção cirúrgica no `index.ts` da função afetada e redeployar
-- Confirmar que CORS, parsing de payload e respostas JSON estão íntegros
+### Nova: kojak-tts (Text-to-Speech)
+- Edge Function que chama `POST /v1/audio/speech` com `openai/gpt-4o-mini-tts`
+- SSE streaming com `response_format: "pcm"` para playback em tempo real
+- Substitui o `speechSynthesis` do navegador (voz robotica) por voz profissional
 
-### Etapa 4 — Relatório final
+### Nova: kojak-stt (Speech-to-Text)
+- Edge Function que chama `POST /v1/audio/transcriptions` com `openai/gpt-4o-mini-transcribe`
+- Recebe audio gravado pelo usuario e retorna transcricao
 
-Entregar um resumo objetivo com:
-- ✅ / ❌ para cada um dos 6 testes
-- Latência aproximada de cada modo
-- Qualquer ajuste aplicado
-- Próximos passos (ex.: configurar `REPLICATE_API_TOKEN` se o usuário quiser ativar o Motion de fato)
+## Etapa 3 — Frontend: UX estilo Gemini (Dark Futurism)
 
-### Detalhes técnicos
+### Streaming no Chat
+- Instalar `@ai-sdk/react` e `ai` no frontend
+- Ou: consumir SSE manualmente no `handleSendMessage` para mostrar tokens chegando em tempo real
+- Efeito de digitacao natural enquanto a resposta chega
 
-- **Não** vou alterar `src/integrations/supabase/client.ts` nem `types.ts`
-- A migration do storage usa apenas `storage.buckets` e `storage.objects` (não toca em schemas reservados além do permitido para policies de bucket)
-- O deploy é automático após a migration; o usuário não precisa fazer nada manual
-- O teste de face swap usa duas URLs públicas pequenas (ex.: avatares do unsplash) para não depender de upload prévio do usuário
+### Upload Multimodal
+- Expandir `ChatInput` para aceitar **PDF** e **audio** alem de imagens
+- Enviar arquivos como base64 ou upload ao Storage e passar URL para a Edge Function
+- PDFs: parsear no servidor e enviar texto ao modelo
+- Audio: enviar para `kojak-stt` e transcrever antes de enviar ao chat
 
-### O que o usuário verá
+### Voz Profissional
+- Botao "Ouvir" nas mensagens do assistente agora chama `kojak-tts` (voz natural)
+- Botao de microfone grava audio WebM/MP4, envia para `kojak-stt`, recebe transcricao
+- Playback via Web Audio API com PCM streaming
 
-Um relatório claro tipo:
-```text
-[OK]  kojak-code   tom Gemini      342ms
-[OK]  kojak-code   memória         410ms
-[OK]  kojak-code   guardrail curso 280ms
-[OK]  kojak-vision texto puro      8.2s
-[OK]  kojak-vision edição          9.1s
-[OK]  kojak-vision face swap       11.4s
-```
+### Layout Gemini-like (mantendo Dark Futurism)
+- Empty state: logo Kojak maior, sugestoes em cards com icones (estilo chips do Gemini)
+- Mensagens do assistente: **sem background** (texto direto na superficie, como Gemini)
+- Mensagens do usuario: bolha preenchida com gradiente roxo (manter)
+- Input: campo centralizado com cantos arredondados, botoes de anexo e mic integrados
+- Animacao de "pensando" com shimmer/skeleton em vez do typing indicator atual
+- Auto-scroll suave
 
-Pronto para aprovar e executar.
+## Etapa 4 — Deploy e Validacao
 
+- Deploy de todas as Edge Functions atualizadas
+- Testar streaming no chat (enviar mensagem, ver tokens fluindo)
+- Testar upload de imagem no Vision
+- Testar voz: gravar -> transcrever -> enviar -> ouvir resposta
+- Testar modo Saude com streaming
+
+---
+
+## Detalhes Tecnicos
+
+| Componente | Antes | Depois |
+|---|---|---|
+| Modelo chat | gemini-2.5-flash | gemini-3-flash-preview |
+| Resposta chat | JSON completo | SSE streaming token-a-token |
+| TTS | Web Speech API (navegador) | Lovable AI gpt-4o-mini-tts (voz natural) |
+| STT | Web Speech API (navegador) | Lovable AI gpt-4o-mini-transcribe |
+| Upload | Apenas imagens | Imagens + PDF + Audio |
+| AI SDK | Nenhum | npm:ai + @ai-sdk/openai-compatible |
+| Mensagem assistente | Bolha glass | Sem background (estilo Gemini) |
+| Loading | TypingIndicator dots | Shimmer/skeleton animado |

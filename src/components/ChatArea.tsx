@@ -2,7 +2,7 @@ import { useRef, useEffect } from "react";
 import { ChatMessage, Message } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { TypingIndicator } from "./TypingIndicator";
-import { Sparkles, Code2, Camera, Play, MessageCircle } from "lucide-react";
+import { Sparkles, Code2, Camera, Play, MessageCircle, HeartPulse } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ChatAreaProps {
@@ -18,7 +18,6 @@ interface ChatAreaProps {
   onStopListening?: () => void;
   onSpeak?: (text: string) => void;
   onStopSpeaking?: () => void;
-  // <--- VIGAS DA PONTE ADICIONADAS --->
   referenceImage?: string | null;
   onSelectReference?: (url: string) => void;
   onClearReference?: () => void;
@@ -29,30 +28,33 @@ const modeInfo = {
   code: { icon: Code2, label: "Kojak Code", color: "text-blue-400", description: "Crie aplicativos e código profissional" },
   vision: { icon: Camera, label: "Kojak Vision", color: "text-amber-400", description: "Gere imagens profissionais com IA" },
   motion: { icon: Play, label: "Kojak Motion", color: "text-rose-400", description: "Crie vídeos em alta definição" },
+  saude: { icon: HeartPulse, label: "Kojak Saúde", color: "text-pink-400", description: "Estrategista científico em Saúde Pública" },
 };
 
 const suggestions: Record<string, string[]> = {
   chat: [
-    "Me explique como funciona a IA",
-    "Quais são as tendências de tecnologia?",
-    "Dicas para produtividade no trabalho",
+    "Me explique como funciona a IA generativa",
+    "Quais são as tendências de tecnologia em 2026?",
+    "Dicas práticas para produtividade",
   ],
   code: [
     "Crie uma API REST em Node.js com Express",
-    "Faça um componente React de formulário de login",
-    "Escreva um script Python para web scraping",
+    "Componente React de formulário de login",
+    "Script Python para web scraping",
   ],
   vision: [
     "Logo minimalista para startup de tecnologia",
-    "Ilustração futurista de cidade cyberpunk",
+    "Cidade cyberpunk futurista ao entardecer",
     "Banner profissional para rede social",
   ],
   motion: [
     "Ondas do mar ao pôr do sol em câmera lenta",
     "Animação abstrata com partículas coloridas",
-    "Paisagem de montanhas com nuvens passando",
+    "Montanhas com nuvens passando rapidamente",
   ],
-};
+  saude: [
+    "Protocolos de biossegurança em UBS",
+    "Estratégias de neutralização vi
 
 function EmptyState({ mode, onSuggestionClick }: { mode: string; onSuggestionClick: (text: string) => void }) {
   const info = modeInfo[mode as keyof typeof modeInfo] || modeInfo.chat;

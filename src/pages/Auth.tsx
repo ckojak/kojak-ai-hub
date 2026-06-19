@@ -56,6 +56,25 @@ export default function Auth() {
     }
   };
 
+  const handleGoogle = async () => {
+    setGoogleLoading(true);
+    try {
+      const result = await lovable.auth.signInWithOAuth("google", {
+        redirect_uri: window.location.origin,
+      });
+      if (result.error) throw new Error(result.error.message || "Falha no login com Google");
+      if (result.redirected) return;
+      navigate("/");
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Não foi possível entrar com Google.",
+        variant: "destructive",
+      });
+      setGoogleLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       {/* Background Effects */}

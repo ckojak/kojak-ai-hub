@@ -1,73 +1,88 @@
-# Welcome to your Lovable project
+# Kojak AI Hub
 
-## Project info
+Plataforma SaaS multimodal de IA — chat, código, visão, vídeo e saúde.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Stack
 
-## How can I edit this code?
+- **Frontend:** React 18 + Vite + TypeScript + Tailwind + shadcn/ui
+- **Backend:** Supabase (Edge Functions + PostgreSQL + Auth)
+- **IA:** OpenRouter (acesso a múltiplos modelos)
+- **Vídeo:** Replicate
 
-There are several ways of editing your application.
+---
 
-**Use Lovable**
+## ⚙️ Configuração das Variáveis de Ambiente
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+### 1. Variáveis do Frontend (`.env`)
 
-Changes made via Lovable will be committed automatically to this repo.
+Crie um arquivo `.env` na raiz do projeto (nunca commite este arquivo):
 
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```env
+VITE_SUPABASE_URL=https://oqcwrqhfuhuaudgwnika.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=sua_chave_anon_aqui
+VITE_SUPABASE_PROJECT_ID=oqcwrqhfuhuaudgwnika
 ```
 
-**Edit a file directly in GitHub**
+### 2. Secrets das Edge Functions (Supabase Dashboard)
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+Acesse: **Supabase → Project Settings → Edge Functions → Secrets**
 
-**Use GitHub Codespaces**
+| Secret | Descrição | Onde obter |
+|--------|-----------|------------|
+| `OPENROUTER_API_KEY` | Chave da API OpenRouter | [openrouter.ai/keys](https://openrouter.ai/keys) |
+| `REPLICATE_API_TOKEN` | Para geração de vídeos | [replicate.com/account](https://replicate.com/account) — opcional |
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+---
 
-## What technologies are used for this project?
+## 🚀 Keep-Alive do Supabase
 
-This project is built with:
+O projeto inclui uma Edge Function `keep-alive` que roda automaticamente todo dia às **08:00 horário de Brasília** via cron job, evitando que o Supabase pause o projeto por inatividade.
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+Para ativar, certifique-se que o `supabase/config.toml` está com a configuração do cron e faça o deploy das functions.
 
-## How can I deploy this project?
+---
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+## 🤖 Modos de IA
 
-## Can I connect a custom domain to my Lovable project?
+| Modo | Função | Modelo |
+|------|--------|--------|
+| Chat | `kojak-code` | google/gemini-2.5-flash |
+| Código | `kojak-code` | google/gemini-2.5-flash |
+| Visão | `kojak-vision` | google/gemini-2.5-flash |
+| Saúde | `kojak-saude` | google/gemini-2.5-flash |
+| Motion | `kojak-motion` | Replicate (vídeo) |
 
-Yes, you can!
+Para trocar de modelo, edite a propriedade `model` em cada Edge Function.
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+---
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+## 🛠️ Desenvolvimento Local
+
+```bash
+# Instalar dependências
+npm install
+
+# Rodar em desenvolvimento
+npm run dev
+
+# Build para produção
+npm run build
+```
+
+---
+
+## 📦 Deploy das Edge Functions
+
+```bash
+# Login no Supabase CLI
+supabase login
+
+# Linkar ao projeto
+supabase link --project-ref oqcwrqhfuhuaudgwnika
+
+# Deploy de todas as functions
+supabase functions deploy
+
+# Adicionar secrets
+supabase secrets set OPENROUTER_API_KEY=sua_chave_aqui
+```

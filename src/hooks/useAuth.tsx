@@ -32,55 +32,65 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (userId: string) => {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", userId)
-      .single();
+  const fetchProfile = async (userId: string, signal?: AbortSignal) => {
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", userId)
+        .maybeSingle()
+        .abortSignal(signal as AbortSignal);
 
-    if (!error && data) {
-      setProfile(data as Profile);
+      if (signal?.aborted) return;
+      if (!error && data) setProfile(data as Profile);
+    } catch (err) {
+      if ((err as Error)?.name !== "AbortError") {
+        // eslint-disable-next-line no-console
+        console.error("[useAuth.fetchProfile]", err);
+      }
     }
   };
 
   const refreshProfile = async () => {
-    if (user) {
-      await fetchProfile(user.id);
-    }
+    if (user) await fetchProfile(user.id);
   };
 
   useEffect(() => {
-    // Set up auth state listener FIRST
+    let mounted = true;
+    const controller = new AbortController();
+
+    // 1) Listener PRIMEIRO para não perder eventos
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, currentSession) => {
+      (_event, currentSession) => {
+        if (!mounted) return;
         setSession(currentSession);
         setUser(currentSession?.user ?? null);
-        
         if (currentSession?.user) {
-          // Use setTimeout to avoid potential race conditions
-          setTimeout(() => fetchProfile(currentSession.user.id), 0);
+          // defer para evitar deadlock no callback do supabase
+          setTimeout(() => {
+            if (mounted) fetchProfile(currentSession.user.id, controller.signal);
+          }, 0);
         } else {
           setProfile(null);
         }
-        
         setLoading(false);
       }
     );
 
-    // THEN get initial session
+    // 2) Sessão inicial
     supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+      if (!mounted) return;
       setSession(initialSession);
       setUser(initialSession?.user ?? null);
-      
       if (initialSession?.user) {
-        fetchProfile(initialSession.user.id);
+        fetchProfile(initialSession.user.id, controller.signal);
       }
-      
       setLoading(false);
     });
 
     return () => {
+      mounted = false;
+      controller.abort();
       subscription.unsubscribe();
     };
   }, []);

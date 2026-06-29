@@ -1,0 +1,22 @@
+project_id = "bhinekniyatxtvbqhjnm"
+
+[functions.kojak-code]
+verify_jwt = false
+
+[functions.kojak-vision]
+verify_jwt = false
+
+[functions.kojak-motion]
+verify_jwt = false
+
+[functions.kojak-saude]
+verify_jwt = false
+
+[functions.keep-alive]
+verify_jwt = false
+
+# CRON JOB: Executa keep-alive diariamente às 08:00 (Brasília) = 11:00 UTC
+# Mantém o Supabase ativo e evita pause automático
+[cron."daily-keep-alive"]
+schedule = "0 11 * * *"
+function = "keep-alive"

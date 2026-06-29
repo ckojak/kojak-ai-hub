@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sparkles, Mail, Lock, User, Eye, EyeOff, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { lovable } from "@/integrations/lovable";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
@@ -19,7 +19,9 @@ export default function Auth() {
   
   const { signIn, signUp } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
+  const intended = (location.state as { from?: string } | null)?.from || "/";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,7 +36,7 @@ export default function Auth() {
           title: "Bem-vindo de volta!",
           description: "Login realizado com sucesso.",
         });
-        navigate("/");
+        navigate(intended, { replace: true });
       } else {
         const { error } = await signUp(email, password, fullName);
         if (error) throw error;
@@ -43,7 +45,7 @@ export default function Auth() {
           title: "Conta criada!",
           description: "Sua conta foi criada com sucesso.",
         });
-        navigate("/");
+        navigate(intended, { replace: true });
       }
     } catch (error: any) {
       toast({
@@ -59,12 +61,16 @@ export default function Auth() {
   const handleGoogle = async () => {
     setGoogleLoading(true);
     try {
-      const result = await lovable.auth.signInWithOAuth("google", {
-        redirect_uri: window.location.origin,
+      // Persiste destino para o /auth/callback redirecionar de volta
+      sessionStorage.setItem("postAuthRedirect", intended);
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
       });
-      if (result.error) throw new Error(result.error.message || "Falha no login com Google");
-      if (result.redirected) return;
-      navigate("/");
+      if (error) throw error;
+      // Browser será redirecionado pelo próprio Supabase
     } catch (error: any) {
       toast({
         title: "Erro",

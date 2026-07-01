@@ -53,7 +53,10 @@ serve(async (req) => {
 
     const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
     if (!OPENROUTER_API_KEY) {
-      throw new Error("OPENROUTER_API_KEY não configurada no Supabase Secrets");
+      return new Response(
+        JSON.stringify({ error: "OPENROUTER_API_KEY não configurada no backend." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // System prompt com contexto pessoal
@@ -121,7 +124,10 @@ serve(async (req) => {
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      throw new Error(`Erro na API OpenRouter: ${response.status}`);
+      return new Response(
+        JSON.stringify({ error: `Erro na API OpenRouter: ${response.status} ${errorText.slice(0, 300)}` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // Streaming SSE

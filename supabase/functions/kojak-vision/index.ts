@@ -25,7 +25,10 @@ serve(async (req) => {
 
     const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
     if (!OPENROUTER_API_KEY) {
-      throw new Error("OPENROUTER_API_KEY não está configurada");
+      return new Response(
+        JSON.stringify({ error: "OPENROUTER_API_KEY não configurada no backend." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     let messageContent: any;
@@ -89,7 +92,11 @@ serve(async (req) => {
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      throw new Error("Erro ao processar a imagem");
+      const errText = await response.text().catch(() => "");
+      return new Response(
+        JSON.stringify({ error: `Erro ao processar imagem: ${response.status} ${errText.slice(0, 300)}` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     const data = await response.json();
@@ -109,7 +116,7 @@ serve(async (req) => {
     console.error("Kojak Vision error:", error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Erro no processamento de visão" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });

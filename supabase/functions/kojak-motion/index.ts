@@ -34,11 +34,11 @@ serve(async (req) => {
 
     console.log(`[kojak-motion] Iniciando: "${prompt.slice(0, 80)}..."`);
 
-    // Inicia geração no Replicate
+    // Inicia geração no Replicate (auth: Token conforme padrão Replicate)
     const createResponse = await fetch("https://api.replicate.com/v1/predictions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${REPLICATE_API_TOKEN}`,
+        Authorization: `Token ${REPLICATE_API_TOKEN}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -54,9 +54,12 @@ serve(async (req) => {
     });
 
     if (!createResponse.ok) {
-      const errorText = await createResponse.text();
+      const errorText = await createResponse.text().catch(() => "");
       console.error("Replicate error:", createResponse.status, errorText);
-      throw new Error("Erro ao iniciar geração de vídeo");
+      return new Response(
+        JSON.stringify({ error: `Replicate ${createResponse.status}: ${errorText.slice(0, 300)}` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     const prediction = await createResponse.json();
@@ -71,7 +74,7 @@ serve(async (req) => {
       await new Promise((resolve) => setTimeout(resolve, 5000));
 
       const statusResponse = await fetch(`https://api.replicate.com/v1/predictions/${result.id}`, {
-        headers: { Authorization: `Bearer ${REPLICATE_API_TOKEN}` },
+        headers: { Authorization: `Token ${REPLICATE_API_TOKEN}` },
       });
 
       if (!statusResponse.ok) throw new Error("Erro ao verificar status");
@@ -106,7 +109,7 @@ serve(async (req) => {
     console.error("Kojak Motion error:", error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Erro na geração de vídeo" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });

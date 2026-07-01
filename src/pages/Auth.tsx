@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,9 +19,7 @@ export default function Auth() {
   
   const { signIn, signUp } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
   const { toast } = useToast();
-  const intended = (location.state as { from?: string } | null)?.from || "/";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,7 +34,7 @@ export default function Auth() {
           title: "Bem-vindo de volta!",
           description: "Login realizado com sucesso.",
         });
-        navigate(intended, { replace: true });
+        navigate("/");
       } else {
         const { error } = await signUp(email, password, fullName);
         if (error) throw error;
@@ -45,7 +43,7 @@ export default function Auth() {
           title: "Conta criada!",
           description: "Sua conta foi criada com sucesso.",
         });
-        navigate(intended, { replace: true });
+        navigate("/");
       }
     } catch (error: any) {
       toast({
@@ -61,16 +59,12 @@ export default function Auth() {
   const handleGoogle = async () => {
     setGoogleLoading(true);
     try {
-      // Persiste destino para o /auth/callback redirecionar de volta
-      sessionStorage.setItem("postAuthRedirect", intended);
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-        },
+        options: { redirectTo: `${window.location.origin}/` },
       });
       if (error) throw error;
-      // Browser será redirecionado pelo próprio Supabase
+      // Browser will redirect to Google; nothing more to do here.
     } catch (error: any) {
       toast({
         title: "Erro",

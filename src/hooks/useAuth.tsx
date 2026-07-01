@@ -32,58 +32,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (userId: string, isMounted: () => boolean) => {
-    try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", userId)
-        .maybeSingle();
+  const fetchProfile = async (userId: string) => {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", userId)
+      .single();
 
-      if (!isMounted()) return;
-      if (!error && data) setProfile(data as Profile);
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error("[useAuth.fetchProfile]", err);
+    if (!error && data) {
+      setProfile(data as Profile);
     }
   };
 
   const refreshProfile = async () => {
-    if (user) await fetchProfile(user.id, () => true);
+    if (user) {
+      await fetchProfile(user.id);
+    }
   };
 
   useEffect(() => {
-    let mounted = true;
-    const alive = () => mounted;
-
+    // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, currentSession) => {
-        if (!mounted) return;
+      async (event, currentSession) => {
         setSession(currentSession);
         setUser(currentSession?.user ?? null);
+        
         if (currentSession?.user) {
-          setTimeout(() => {
-            if (mounted) fetchProfile(currentSession.user.id, alive);
-          }, 0);
+          // Use setTimeout to avoid potential race conditions
+          setTimeout(() => fetchProfile(currentSession.user.id), 0);
         } else {
           setProfile(null);
         }
+        
         setLoading(false);
       }
     );
 
+    // THEN get initial session
     supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
-      if (!mounted) return;
       setSession(initialSession);
       setUser(initialSession?.user ?? null);
+      
       if (initialSession?.user) {
-        fetchProfile(initialSession.user.id, alive);
+        fetchProfile(initialSession.user.id);
       }
+      
       setLoading(false);
     });
 
     return () => {
-      mounted = false;
       subscription.unsubscribe();
     };
   }, []);

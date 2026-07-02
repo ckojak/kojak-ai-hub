@@ -98,14 +98,18 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    const textContent = data.choices?.[0]?.message?.content || "Processamento concluído.";
+    const msg = data.choices?.[0]?.message || {};
+    const textContent = msg.content || "Imagem gerada.";
+    // Lovable image models retornam a imagem em message.images[0].image_url.url (base64 data URL)
+    const imageUrl = msg.images?.[0]?.image_url?.url || null;
 
     return new Response(
       JSON.stringify({
         id: crypto.randomUUID(),
         role: "assistant",
-        content: textContent,
-        type: "text",
+        content: imageUrl ? (safePrompt || "Aqui está a imagem gerada.") : textContent,
+        type: imageUrl ? "image" : "text",
+        mediaUrl: imageUrl,
         timestamp: new Date().toISOString(),
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

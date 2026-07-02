@@ -106,7 +106,7 @@ export default function Auth() {
             onClick={handleGoogle}
             disabled={googleLoading || loading}
             variant="outline"
-            className="w-full bg-white/5 border-white/10 hover:bg-white/10 text-foreground font-medium py-6 mb-4"
+            className="w-full bg-white/5 border-white/10 hover:bg-white/10 text-foreground font-medium h-12 text-base mb-4"
           >
             {googleLoading ? (
               <Loader2 className="w-5 h-5 animate-spin" />
@@ -146,7 +146,7 @@ export default function Auth() {
                     placeholder="Seu nome"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
-                    className="pl-10 bg-white/5 border-white/10 focus:border-primary/50"
+                    className="pl-10 h-11 text-base bg-white/5 border-white/10 focus:border-primary/50"
                   />
                 </div>
               </div>
@@ -165,7 +165,7 @@ export default function Auth() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="pl-10 bg-white/5 border-white/10 focus:border-primary/50"
+                  className="pl-10 h-11 text-base bg-white/5 border-white/10 focus:border-primary/50"
                 />
               </div>
             </div>
@@ -184,7 +184,7 @@ export default function Auth() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   minLength={6}
-                  className="pl-10 pr-10 bg-white/5 border-white/10 focus:border-primary/50"
+                  className="pl-10 pr-10 h-11 text-base bg-white/5 border-white/10 focus:border-primary/50"
                 />
                 <button
                   type="button"
@@ -199,7 +199,7 @@ export default function Auth() {
             <Button
               type="submit"
               disabled={loading}
-              className="w-full bg-gradient-purple hover:opacity-90 glow-purple text-white font-semibold py-6"
+              className="w-full bg-gradient-purple hover:opacity-90 glow-purple text-white font-semibold h-12 text-base"
             >
               {loading ? (
                 <Loader2 className="w-5 h-5 animate-spin" />

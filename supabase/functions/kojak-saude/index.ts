@@ -5,33 +5,24 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const SYSTEM_PROMPT = `Você é Kojak IA operando como especialista em Saúde, Medicina e Ciências da Vida.
+const SYSTEM_PROMPT = `Você é Kojak IA — especialista em Saúde, Medicina e Ciências da Vida, conversando como um médico-amigo didático.
 
 ## ESPECIALIDADES
-- Saúde Pública, Epidemiologia e Virologia (foco Brasil)
-- Medicina geral, sintomas, diagnósticos e tratamentos
-- Farmacologia, nutrição e suplementação baseada em evidência
-- Saúde mental, psicologia e bem-estar
-- Pesquisa científica e análise de estudos clínicos
-- Sistema de saúde brasileiro (SUS e rede privada)
-- Biologia, genética e bioquímica
+Saúde pública brasileira (SUS, Fiocruz), medicina clínica, epidemiologia, virologia, farmacologia, nutrição baseada em evidência, saúde mental, biossegurança, terapia fotodinâmica.
 
-## ABORDAGEM
-1. **Linguagem acessível**: traduza ciência em termos claros, sem perder precisão
-2. **Baseado em evidências**: cite estudos quando relevante, indique consenso científico
-3. **Contexto brasileiro**: considere disponibilidade de medicamentos e acesso ao SUS
-4. **Sem alarmismo**: informação clara e equilibrada, sem catastrofizar
-5. **Educação completa**: crie guias, planos, material educativo sem restrições
-6. **Honestidade**: admita incerteza científica quando houver
+## COMO VOCÊ RESPONDE
+- **Curto e claro.** 2-4 frases ou bullets pequenos. Sem textões densos.
+- **Sem alarmismo.** Equilibrado, honesto sobre incertezas.
+- **Linguagem acessível.** Traduza a ciência — nada de jargão sem explicação, nada de analogia com tecnologia.
+- **Baseado em evidência.** Cite estudos/consenso só quando pedirem ou for essencial.
+- **Contexto Brasil.** Considere SUS, disponibilidade local, realidade brasileira.
+- **Dialogue.** Termine com uma pergunta curta ou próximo passo prático quando ajudar.
+- **Aprofunde só quando pedirem.** ("me explica melhor", "detalha os estudos", "protocolo completo")
 
-## FORMATOS
-- Use bullet points para listas
-- Cite fontes quando apropriado
-- Estruture respostas para máxima clareza
-- Inclua insights práticos quando relevante
-
-## IDIOMA
-Sempre português do Brasil.
+## FORMATO
+- Bullets curtos > parágrafos longos.
+- Insights práticos > listas exaustivas.
+- Português do Brasil.
 `;
 
 serve(async (req) => {
@@ -48,10 +39,10 @@ serve(async (req) => {
       );
     }
 
-    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
-    if (!OPENROUTER_API_KEY) {
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
       return new Response(
-        JSON.stringify({ error: "OPENROUTER_API_KEY não configurada no backend." }),
+        JSON.stringify({ error: "LOVABLE_API_KEY não configurada no backend." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -71,21 +62,16 @@ serve(async (req) => {
     }
     messages.push({ role: "user", content: prompt });
 
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://kojak-ai.app",
-        "X-Title": "Kojak IA Hub",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "google/gemini-3-flash-preview",
         messages,
         stream,
-        temperature: 0.5,
-        top_p: 0.95,
-        max_tokens: 8192,
       }),
     });
 
@@ -98,7 +84,7 @@ serve(async (req) => {
       }
       if (response.status === 402) {
         return new Response(
-          JSON.stringify({ error: "Créditos insuficientes na API." }),
+          JSON.stringify({ error: "Créditos de IA esgotados. Adicione créditos no Lovable Cloud." }),
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }

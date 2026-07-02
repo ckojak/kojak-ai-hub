@@ -128,7 +128,7 @@ export function ChatInput({
   const currentMode = modes.find((m) => m.id === activeMode) || modes[0];
 
   return (
-    <div className="sticky bottom-0 p-4 pb-20 md:pb-4 bg-gradient-to-t from-background via-background/95 to-transparent">
+    <div className="sticky bottom-0 p-3 sm:p-4 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-4 bg-gradient-to-t from-background via-background/95 to-transparent">
       <form onSubmit={handleSubmit} className="max-w-3xl mx-auto glass-card-strong rounded-2xl transition-all duration-300 hover:border-primary/30 neon-border">
         
         {/* NOVO: Visor da Imagem de Referência (Alvo) */}

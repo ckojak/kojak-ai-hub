@@ -42,22 +42,20 @@ serve(async (req) => {
       );
     }
 
-    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
-    if (!OPENROUTER_API_KEY) {
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
       return new Response(
-        JSON.stringify({ error: "OPENROUTER_API_KEY não configurada no backend." }),
+        JSON.stringify({ error: "LOVABLE_API_KEY não configurada no backend." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // System prompt com contexto pessoal
     const systemContent = context && typeof context === "string" && context.trim()
       ? `${SYSTEM_PROMPT}\n\n## CONTEXTO DO USUÁRIO\n${context.trim()}`
       : SYSTEM_PROMPT;
 
     const messages: any[] = [{ role: "system", content: systemContent }];
 
-    // Histórico (últimas 15 mensagens para contexto melhor)
     if (Array.isArray(history)) {
       for (const m of history.slice(-15)) {
         if (m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string") {
@@ -66,42 +64,34 @@ serve(async (req) => {
       }
     }
 
-    // Mensagem com ou sem imagem
     if (image) {
       messages.push({
         role: "user",
         content: [
           { type: "text", text: prompt || "Analise esta imagem e descreva o que vê." },
-          { type: "image_url", image_url: { url: image, detail: "high" } },
+          { type: "image_url", image_url: { url: image } },
         ],
       });
     } else {
       messages.push({ role: "user", content: prompt });
     }
 
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://kojak-ai.app",
-        "X-Title": "Kojak IA Hub",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "google/gemini-3-flash-preview",
         messages,
         stream,
-        temperature: 0.7,
-        top_p: 0.95,
-        max_tokens: 8192,
-        presence_penalty: 0,
-        frequency_penalty: 0,
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("OpenRouter error:", response.status, errorText);
+      console.error("Lovable AI error:", response.status, errorText);
 
       if (response.status === 429) {
         return new Response(
@@ -111,12 +101,12 @@ serve(async (req) => {
       }
       if (response.status === 402) {
         return new Response(
-          JSON.stringify({ error: "Créditos insuficientes na API. Verifique sua conta no OpenRouter." }),
+          JSON.stringify({ error: "Créditos de IA esgotados. Adicione créditos no painel Lovable Cloud." }),
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       return new Response(
-        JSON.stringify({ error: `Erro na API OpenRouter: ${response.status} ${errorText.slice(0, 300)}` }),
+        JSON.stringify({ error: `Erro na IA: ${response.status} ${errorText.slice(0, 300)}` }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

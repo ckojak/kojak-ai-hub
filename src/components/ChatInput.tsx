@@ -17,6 +17,8 @@ interface ChatInputProps {
   onStopSpeaking?: () => void;
   referenceImage?: string | null; // <--- NOVO: Recebe a imagem alvo
   onClearReference?: () => void;  // <--- NOVO: Função para limpar a imagem alvo
+  aiTier?: "fast" | "pro";
+  onTierChange?: (tier: "fast" | "pro") => void;
 }
 
 const modes = [
@@ -39,6 +41,8 @@ export function ChatInput({
   onStopSpeaking,
   referenceImage,
   onClearReference,
+  aiTier = "fast",
+  onTierChange,
 }: ChatInputProps) {
   const [message, setMessage] = useState("");
   const [attachedImage, setAttachedImage] = useState<File | null>(null);
@@ -128,7 +132,7 @@ export function ChatInput({
   const currentMode = modes.find((m) => m.id === activeMode) || modes[0];
 
   return (
-    <div className="sticky bottom-0 p-3 sm:p-4 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-4 bg-gradient-to-t from-background via-background/95 to-transparent">
+    <div className="sticky bottom-0 p-4 pb-20 md:pb-4 bg-gradient-to-t from-background via-background/95 to-transparent">
       <form onSubmit={handleSubmit} className="max-w-3xl mx-auto glass-card-strong rounded-2xl transition-all duration-300 hover:border-primary/30 neon-border">
         
         {/* NOVO: Visor da Imagem de Referência (Alvo) */}
@@ -148,7 +152,7 @@ export function ChatInput({
 
         {/* Visor da Imagem Anexada (Fonte) */}
         {imagePreview && (
-          <div className="p-3 border-b border-white/10">
+          <div className="p-3 border-b border-border">
             <div className="relative inline-block">
               <img src={imagePreview} alt="Preview" className="h-20 w-auto rounded-lg object-cover" />
               <button type="button" onClick={removeImage} className="absolute -top-2 -right-2 w-6 h-6 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center hover:scale-110 transition-transform">
@@ -158,12 +162,43 @@ export function ChatInput({
           </div>
         )}
 
-        <div className="hidden md:flex items-center gap-1 px-4 pt-3 pb-2 border-b border-white/10">
+        {/* Toggle de Tier: Rápido (econômico) vs Avançado (completo) */}
+        <div className="flex items-center justify-between gap-2 px-4 pt-3 pb-2 border-b border-border">
+          <span className="text-xs text-muted-foreground">Modo de IA:</span>
+          <div className="flex items-center gap-1 bg-foreground/5 rounded-full p-1">
+            <button
+              type="button"
+              onClick={() => onTierChange?.("fast")}
+              className={cn(
+                "px-3 py-1 rounded-full text-[11px] font-semibold transition-all duration-200",
+                aiTier === "fast"
+                  ? "bg-gradient-purple text-white glow-purple"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              ⚡ Rápido
+            </button>
+            <button
+              type="button"
+              onClick={() => onTierChange?.("pro")}
+              className={cn(
+                "px-3 py-1 rounded-full text-[11px] font-semibold transition-all duration-200",
+                aiTier === "pro"
+                  ? "bg-gradient-purple text-white glow-purple"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              🚀 Avançado
+            </button>
+          </div>
+        </div>
+
+        <div className="hidden md:flex items-center gap-1 px-4 pt-3 pb-2 border-b border-border">
           <span className="text-xs text-muted-foreground mr-2">Modo:</span>
           {modes.map((mode) => {
             const isActive = activeMode === mode.id;
             return (
-              <button key={mode.id} type="button" onClick={() => onModeChange(mode.id)} className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all duration-200", isActive ? "bg-primary/20 text-primary border border-primary/30 glow-purple" : "text-muted-foreground hover:bg-white/5 hover:text-foreground")}>
+              <button key={mode.id} type="button" onClick={() => onModeChange(mode.id)} className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all duration-200", isActive ? "bg-primary/20 text-primary border border-primary/30 glow-purple" : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground")}>
                 <mode.icon className={cn("w-3.5 h-3.5", isActive && mode.color)} />
                 {mode.label}
               </button>
@@ -173,11 +208,11 @@ export function ChatInput({
 
         <div className="flex items-end gap-3 p-3">
           <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
-          <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isLoading || isUploading} className={cn("flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-200", attachedImage ? "bg-primary/20 text-primary border border-primary/30" : "bg-white/5 text-muted-foreground hover:bg-white/10 hover:text-foreground")}>
+          <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isLoading || isUploading} className={cn("flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-200", attachedImage ? "bg-primary/20 text-primary border border-primary/30" : "bg-foreground/5 text-muted-foreground hover:bg-foreground/10 hover:text-foreground")}>
             {attachedImage ? <ImageIcon className="w-5 h-5" /> : <Paperclip className="w-5 h-5" />}
           </button>
 
-          <button type="button" onClick={isListening ? onStopListening : onStartListening} disabled={isLoading} className={cn("flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-200", isListening ? "bg-primary text-primary-foreground voice-pulse" : "bg-white/5 text-muted-foreground hover:bg-white/10 hover:text-foreground")}>
+          <button type="button" onClick={isListening ? onStopListening : onStartListening} disabled={isLoading} className={cn("flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-200", isListening ? "bg-primary text-primary-foreground voice-pulse" : "bg-foreground/5 text-muted-foreground hover:bg-foreground/10 hover:text-foreground")}>
             {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
           </button>
 
@@ -190,7 +225,7 @@ export function ChatInput({
             </button>
           )}
 
-          <button type="submit" disabled={(!message.trim() && !attachedImage && !referenceImage) || isLoading || isUploading} className={cn("flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-200", (message.trim() || attachedImage || referenceImage) && !isLoading && !isUploading ? "bg-gradient-purple text-primary-foreground glow-purple hover:scale-105" : "bg-white/5 text-muted-foreground cursor-not-allowed")}>
+          <button type="submit" disabled={(!message.trim() && !attachedImage && !referenceImage) || isLoading || isUploading} className={cn("flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-200", (message.trim() || attachedImage || referenceImage) && !isLoading && !isUploading ? "bg-gradient-purple text-primary-foreground glow-purple hover:scale-105" : "bg-foreground/5 text-muted-foreground cursor-not-allowed")}>
             {isLoading || isUploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
           </button>
         </div>

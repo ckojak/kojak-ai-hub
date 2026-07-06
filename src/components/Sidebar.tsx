@@ -39,12 +39,12 @@ export function Sidebar({
     <aside
       className={cn(
         "hidden md:flex fixed left-0 top-0 h-screen z-50 flex-col transition-all duration-300",
-        "bg-gradient-to-b from-black/95 via-black/90 to-black/95 backdrop-blur-xl border-r border-white/10",
+        "bg-gradient-to-b from-background/95 via-background/90 to-background/95 backdrop-blur-xl border-r border-border",
         collapsed ? "w-16" : "w-72"
       )}
     >
       {/* Logo */}
-      <div className="flex items-center gap-3 px-4 py-5 border-b border-white/10">
+      <div className="flex items-center gap-3 px-4 py-5 border-b border-border">
         <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-purple glow-purple">
           <Sparkles className="w-5 h-5 text-white" />
         </div>
@@ -85,12 +85,12 @@ export function Sidebar({
       )}
 
       {/* Bottom Actions */}
-      <div className="p-3 border-t border-white/10 space-y-1">
+      <div className="p-3 border-t border-border space-y-1">
         <button
           onClick={onOpenSettings}
           className={cn(
             "flex items-center gap-3 w-full px-3 py-2.5 rounded-xl transition-all",
-            "text-muted-foreground hover:text-foreground hover:bg-white/5",
+            "text-muted-foreground hover:text-foreground hover:bg-foreground/5",
             collapsed && "justify-center"
           )}
         >
@@ -104,7 +104,7 @@ export function Sidebar({
             onClick={onOpenSettings}
             className={cn(
               "flex items-center gap-3 p-2 rounded-xl cursor-pointer transition-all",
-              "hover:bg-white/5",
+              "hover:bg-foreground/5",
               collapsed && "justify-center"
             )}
           >

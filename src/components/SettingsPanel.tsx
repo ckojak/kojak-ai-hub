@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { 
   X, 
   History, 
@@ -13,6 +14,7 @@ import {
   Trash2,
   ChevronRight,
   LogOut,
+  LogIn,
   Loader2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -53,6 +55,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
   const { user, profile, signOut, updateProfile } = useAuth();
   const { theme, setTheme } = useTheme();
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   // Fetch activity log
   useEffect(() => {
@@ -211,7 +214,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
               value={personalContext}
               onChange={(e) => setPersonalContext(e.target.value)}
               placeholder="Ex: Sou desenvolvedor web, prefiro exemplos em TypeScript, trabalho com React..."
-              className="min-h-[150px] bg-white/5 border-white/10"
+              className="min-h-[150px] bg-foreground/5 border-border"
             />
             <button
               onClick={handleSaveContext}
@@ -268,7 +271,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                       "w-full flex items-center gap-3 p-4 rounded-xl transition-all",
                       isActive
                         ? "bg-primary/20 border border-primary/30"
-                        : "glass-card hover:bg-white/5"
+                        : "glass-card hover:bg-foreground/5"
                     )}
                   >
                     <Icon className={cn("w-5 h-5", isActive && "text-primary")} />
@@ -322,17 +325,17 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-[90vw] max-w-md p-0 border-l border-white/10 bg-black/95 backdrop-blur-xl"
+        className="w-[90vw] max-w-md p-0 border-l border-border bg-background/95 backdrop-blur-xl"
       >
         <div className="flex flex-col h-full">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-white/10">
+          <div className="flex items-center justify-between p-4 border-b border-border">
             <h2 className="text-lg font-semibold">
               {activeSection ? menuItems.find((m) => m.id === activeSection)?.label : "Configurações"}
             </h2>
             <button
               onClick={() => activeSection ? setActiveSection(null) : onOpenChange(false)}
-              className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+              className="p-2 rounded-lg hover:bg-foreground/10 transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
@@ -358,7 +361,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                     <button
                       key={item.id}
                       onClick={() => setActiveSection(item.id)}
-                      className="w-full flex items-center gap-3 p-4 rounded-xl glass-card hover:bg-white/5 transition-all group"
+                      className="w-full flex items-center gap-3 p-4 rounded-xl glass-card hover:bg-foreground/5 transition-all group"
                     >
                       <Icon className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
                       <span className="flex-1 text-left">{item.label}</span>
@@ -372,7 +375,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
 
           {/* User Profile Footer */}
           {user && profile && !activeSection && (
-            <div className="p-4 border-t border-white/10 space-y-3">
+            <div className="p-4 border-t border-border space-y-3">
               <div className="flex items-center gap-3 p-3 rounded-xl glass-card">
                 <Avatar className="w-12 h-12">
                   <AvatarImage src={profile.avatar_url || undefined} />
@@ -396,6 +399,25 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                 <LogOut className="w-4 h-4" />
                 <span className="font-medium">Sair da conta</span>
               </button>
+            </div>
+          )}
+
+          {/* Login Button — visível quando deslogado, inclusive no mobile */}
+          {!user && !activeSection && (
+            <div className="p-4 border-t border-border">
+              <button
+                onClick={() => {
+                  onOpenChange(false);
+                  navigate("/auth");
+                }}
+                className="w-full flex items-center justify-center gap-2 p-4 rounded-xl bg-gradient-purple text-white font-semibold glow-purple hover:scale-[1.02] transition-all"
+              >
+                <LogIn className="w-5 h-5" />
+                <span>Fazer login</span>
+              </button>
+              <p className="text-xs text-muted-foreground text-center mt-2">
+                Entre para salvar suas conversas e preferências.
+              </p>
             </div>
           )}
         </div>

@@ -24,6 +24,7 @@ const modeConfig: Record<string, { function: string; streams: boolean }> = {
 
 const Index = () => {
   const [activeMode, setActiveMode] = useState("chat");
+  const [aiTier, setAiTier] = useState<"fast" | "pro">("fast");
   const [isLoading, setIsLoading] = useState(false);
   const [streamingContent, setStreamingContent] = useState<string>("");
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -157,6 +158,7 @@ const Index = () => {
         history: recentHistory,
         image: imageUrl,
         reference_image: referenceImage,
+        tier: aiTier,
       };
 
       if (config.streams) {
@@ -230,7 +232,7 @@ const Index = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [user, currentChat, createChat, addMessage, updateChatTitle, dbMessages, profile, toast, logActivity, referenceImage, localMessages.length, baseMessages, streamFromFunction]);
+  }, [user, currentChat, createChat, addMessage, updateChatTitle, dbMessages, profile, toast, logActivity, referenceImage, localMessages.length, baseMessages, streamFromFunction, aiTier]);
 
   const handleNewChat = useCallback(async () => {
     if (user) await createChat(activeMode);
@@ -242,7 +244,7 @@ const Index = () => {
 
   if (authLoading) {
     return (
-      <div className="h-[100dvh] bg-background flex items-center justify-center">
+      <div className="h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
           <p className="text-muted-foreground">Carregando...</p>
@@ -252,7 +254,7 @@ const Index = () => {
   }
 
   return (
-    <div className="h-[100dvh] bg-background flex flex-col overflow-hidden">
+    <div className="h-screen bg-background flex flex-col overflow-hidden">
       <Sidebar chats={chats} currentChatId={currentChat?.id} onSelectChat={selectChat} onNewChat={handleNewChat} onDeleteChat={deleteChat} onOpenSettings={() => setSettingsOpen(true)} />
       <MobileHistorySheet open={historyOpen} onOpenChange={setHistoryOpen} chats={chats} currentChatId={currentChat?.id} onSelectChat={selectChat} onNewChat={handleNewChat} onDeleteChat={deleteChat} />
       <SettingsPanel open={settingsOpen} onOpenChange={setSettingsOpen} />
@@ -274,6 +276,8 @@ const Index = () => {
           referenceImage={referenceImage}
           onSelectReference={setReferenceImage}
           onClearReference={() => setReferenceImage(null)}
+          aiTier={aiTier}
+          onTierChange={setAiTier}
         />
       </main>
 

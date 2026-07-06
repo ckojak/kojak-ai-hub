@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sparkles, Mail, Lock, User, Eye, EyeOff, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { lovable } from "@/integrations/lovable";
 
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
@@ -59,12 +59,12 @@ export default function Auth() {
   const handleGoogle = async () => {
     setGoogleLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: { redirectTo: `${window.location.origin}/` },
+      const result = await lovable.auth.signInWithOAuth("google", {
+        redirect_uri: window.location.origin,
       });
-      if (error) throw error;
-      // Browser will redirect to Google; nothing more to do here.
+      if (result.error) throw new Error(result.error.message || "Falha no login com Google");
+      if (result.redirected) return;
+      navigate("/");
     } catch (error: any) {
       toast({
         title: "Erro",
@@ -76,28 +76,28 @@ export default function Auth() {
   };
 
   return (
-    <div className="min-h-[100dvh] w-full bg-background overflow-y-auto overscroll-contain flex items-start sm:items-center justify-center px-4 py-6 sm:py-8">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
       {/* Background Effects */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/20 rounded-full blur-3xl animate-pulse-slow" />
         <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-secondary/20 rounded-full blur-3xl animate-pulse-slow" />
       </div>
 
-      <div className="relative w-full max-w-md my-auto">
+      <div className="relative w-full max-w-md">
         {/* Logo */}
-        <div className="text-center mb-5 sm:mb-8">
-          <div className="inline-flex p-3 sm:p-4 rounded-2xl bg-gradient-purple glow-purple-lg mb-3 sm:mb-4">
-            <Sparkles className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
+        <div className="text-center mb-8">
+          <div className="inline-flex p-4 rounded-2xl bg-gradient-purple glow-purple-lg mb-4">
+            <Sparkles className="w-10 h-10 text-white" />
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gradient-purple">Kojak IA</h1>
-          <p className="text-sm text-muted-foreground mt-2">
+          <h1 className="text-3xl font-bold text-gradient-purple">Kojak IA</h1>
+          <p className="text-muted-foreground mt-2">
             Plataforma Multimodal de Inteligência Artificial
           </p>
         </div>
 
         {/* Auth Card */}
-        <div className="glass-card-strong rounded-3xl p-5 sm:p-8 neon-border">
-          <h2 className="text-lg sm:text-xl font-semibold text-center mb-5 sm:mb-6">
+        <div className="glass-card-strong rounded-3xl p-8 neon-border">
+          <h2 className="text-xl font-semibold text-center mb-6">
             {isLogin ? "Entrar na sua conta" : "Criar nova conta"}
           </h2>
 
@@ -106,7 +106,7 @@ export default function Auth() {
             onClick={handleGoogle}
             disabled={googleLoading || loading}
             variant="outline"
-            className="w-full bg-white/5 border-white/10 hover:bg-white/10 text-foreground font-medium h-12 text-base mb-4"
+            className="w-full bg-foreground/5 border-border hover:bg-foreground/10 text-foreground font-medium py-6 mb-4"
           >
             {googleLoading ? (
               <Loader2 className="w-5 h-5 animate-spin" />
@@ -125,7 +125,7 @@ export default function Auth() {
 
           <div className="relative mb-4">
             <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-white/10" />
+              <span className="w-full border-t border-border" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
               <span className="px-2 text-muted-foreground">ou</span>
@@ -146,7 +146,7 @@ export default function Auth() {
                     placeholder="Seu nome"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
-                    className="pl-10 h-11 text-base bg-white/5 border-white/10 focus:border-primary/50"
+                    className="pl-10 bg-foreground/5 border-border focus:border-primary/50"
                   />
                 </div>
               </div>
@@ -165,7 +165,7 @@ export default function Auth() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="pl-10 h-11 text-base bg-white/5 border-white/10 focus:border-primary/50"
+                  className="pl-10 bg-foreground/5 border-border focus:border-primary/50"
                 />
               </div>
             </div>
@@ -184,7 +184,7 @@ export default function Auth() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   minLength={6}
-                  className="pl-10 pr-10 h-11 text-base bg-white/5 border-white/10 focus:border-primary/50"
+                  className="pl-10 pr-10 bg-foreground/5 border-border focus:border-primary/50"
                 />
                 <button
                   type="button"
@@ -199,7 +199,7 @@ export default function Auth() {
             <Button
               type="submit"
               disabled={loading}
-              className="w-full bg-gradient-purple hover:opacity-90 glow-purple text-white font-semibold h-12 text-base"
+              className="w-full bg-gradient-purple hover:opacity-90 glow-purple text-white font-semibold py-6"
             >
               {loading ? (
                 <Loader2 className="w-5 h-5 animate-spin" />

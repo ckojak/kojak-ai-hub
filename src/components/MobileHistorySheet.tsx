@@ -25,7 +25,7 @@ export function MobileHistorySheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent 
         side="left" 
-        className="w-[85vw] max-w-sm p-0 border-r border-white/10 bg-black/95 backdrop-blur-xl"
+        className="w-[85vw] max-w-sm p-0 border-r border-border bg-background/95 backdrop-blur-xl"
       >
         <ChatHistory
           chats={chats}

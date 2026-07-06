@@ -21,6 +21,8 @@ interface ChatAreaProps {
   referenceImage?: string | null;
   onSelectReference?: (url: string) => void;
   onClearReference?: () => void;
+  aiTier?: "fast" | "pro";
+  onTierChange?: (tier: "fast" | "pro") => void;
 }
 
 const modeInfo = {
@@ -53,9 +55,9 @@ const suggestions: Record<string, string[]> = {
     "Montanhas com nuvens passando rapidamente",
   ],
   saude: [
-    "Protocolos de biossegurança em UBS",
-    "Estratégias de neutralização viral com íons de zinco",
-    "Terapia fotodinâmica aplicada em campo",
+    "Como aliviar dor de cabeça sem remédio",
+    "Alimentação para ganho de massa magra",
+    "Quando devo procurar um médico com urgência?",
   ],
 };
 
@@ -124,6 +126,8 @@ export function ChatArea({
   referenceImage,
   onSelectReference,
   onClearReference,
+  aiTier,
+  onTierChange,
 }: ChatAreaProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -173,6 +177,8 @@ export function ChatArea({
         onStopSpeaking={onStopSpeaking}
         referenceImage={referenceImage}     // <--- REPASSE PARA O VISOR DO INPUT
         onClearReference={onClearReference} // <--- REPASSE PARA O VISOR DO INPUT
+        aiTier={aiTier}
+        onTierChange={onTierChange}
       />
     </div>
   );

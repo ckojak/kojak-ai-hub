@@ -2,68 +2,68 @@ import { useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface UseVoiceReturn {
-  estáEscutando: booleano;
-  estáFalando: booleano;
-  transcrição: string;
-  iniciarEscuta: () => vazio;
-  pararEscutando: () => vazio;
-  falar: (texto: string) => vazio;
-  pararDeFalar: () => vazio;
+  isListening: boolean;
+  isSpeaking: boolean;
+  transcript: string;
+  startListening: () => void;
+  stopListening: () => void;
+  speak: (text: string) => void;
+  stopSpeaking: () => void;
 }
 
 export function useVoice(): UseVoiceReturn {
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [transcrição, definirTranscrição] = useState("");
+  const [transcript, setTranscript] = useState("");
   const recognitionRef = useRef<any>(null);
-  const audioRef = useRef<HTMLAudioElement | nulo>(nulo);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const startListening = useCallback(() => {
     if (!("webkitSpeechRecognition" in window) && !("SpeechRecognition" in window)) {
-      console.error("Reconhecimento de fala não suportado");
-      retornar;
+      console.error("Speech recognition not supported");
+      return;
     }
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
 
-    reconhecimento.contínuo = falso;
-    reconhecimento.resultadosinterinos = verdadeiro;
+    recognition.continuous = false;
+    recognition.interimResults = true;
     recognition.lang = "pt-BR";
 
-    reconhecimento.onstart = () => {
+    recognition.onstart = () => {
       setIsListening(true);
-      setTranscrição("");
+      setTranscript("");
     };
 
-    reconhecimento.onresultado = (evento) => {
-      seja finalTranscript = "";
-      para (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcrição = evento.resultados[i][0].transcrição;
-        se (event.results[i].isFinal) {
-          finalTransscript += transcrição;
+    recognition.onresult = (event) => {
+      let finalTranscript = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript;
         }
       }
-      se (transcriçãofinal) {
+      if (finalTranscript) {
         setTranscript(finalTranscript);
       }
     };
 
-    reconhecimento.onerror = (evento) => {
-      console.error("Erro de reconhecimento de fala:", event.error);
+    recognition.onerror = (event) => {
+      console.error("Speech recognition error:", event.error);
       setIsListening(false);
     };
 
-    reconhecimento.onend = () => {
+    recognition.onend = () => {
       setIsListening(false);
     };
 
-    recognitionRef.atual = reconhecimento;
-    reconhecimento.iniciar();
+    recognitionRef.current = recognition;
+    recognition.start();
   }, []);
 
   const stopListening = useCallback(() => {
-    se (recognitionRef.atual) {
+    if (recognitionRef.current) {
       recognitionRef.current.stop();
       setIsListening(false);
     }
@@ -71,21 +71,21 @@ export function useVoice(): UseVoiceReturn {
 
   // Fallback: voz robótica nativa do navegador (usada só se a IA de voz falhar)
   const speakBrowserFallback = useCallback((cleanText: string) => {
-    se (!("síntese de fala" na janela)) {
-      console.error("Síntese de fala não suportada");
-      retornar;
+    if (!("speechSynthesis" in window)) {
+      console.error("Speech synthesis not supported");
+      return;
     }
-    janela.sínteseDeFala.cancelar();
+    window.speechSynthesis.cancel();
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.lang = "pt-BR";
-    taxa de enunciados = 0,92;
+    utterance.rate = 0.92;
     utterance.pitch = 0.95;
-    enunciado.volume = 0,9;
+    utterance.volume = 0.9;
 
-    const vozes = window.speechSynthesis.getVoices();
-    const vozFeminina = vozes.find(
-      (voz) =>
+    const voices = window.speechSynthesis.getVoices();
+    const femaleVoice = voices.find(
+      (voice) =>
         voice.lang.includes("pt") &&
         (voice.name.toLowerCase().includes("female") ||
           voice.name.toLowerCase().includes("feminina") ||
@@ -93,47 +93,47 @@ export function useVoice(): UseVoiceReturn {
           voice.name.includes("Francisca") ||
           voice.name.includes("Google português"))
     );
-    se (vozfeminina) enunciado.voz = vozfeminina;
+    if (femaleVoice) utterance.voice = femaleVoice;
 
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => setIsSpeaking(false);
-    expressão.onerror = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
 
-    janela.sínteseDeFala.fala(enunciado);
+    window.speechSynthesis.speak(utterance);
   }, []);
 
   const speak = useCallback((text: string) => {
     // Limpa markdown e código antes de mandar pra voz
-    const textoLimpo = texto
+    const cleanText = text
       .replace(/```[\s\S]*?```/g, " código omitido ")
       .replace(/`[^`]+`/g, "")
       .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
       .replace(/[#*_~]/g, "")
       .replace(/\n+/g, " ")
-      .aparar();
+      .trim();
 
-    se (!cleanText) retornar;
+    if (!cleanText) return;
 
     // Para qualquer áudio anterior
-    se (audioRef.atual) {
+    if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
     }
-    janela.sínteseDeFala?.cancelar();
+    window.speechSynthesis?.cancel();
 
     setIsSpeaking(true);
 
-    funções da base
+    supabase.functions
       .invoke("kojak-voice", { body: { text: cleanText, voice: "Kore" } })
-      .then(({ dados, erro }) => {
-        se (erro || !dados?.áudio) {
-          console.error("Voz neural indisponível, usando fallback do navegador:", erro);
+      .then(({ data, error }) => {
+        if (error || !data?.audio) {
+          console.error("Voz neural indisponível, usando fallback do navegador:", error);
           speakBrowserFallback(cleanText);
-          retornar;
+          return;
         }
 
         const audio = new Audio(data.audio);
-        audioRef.atual = áudio;
+        audioRef.current = audio;
         audio.onended = () => setIsSpeaking(false);
         audio.onerror = () => {
           console.error("Erro ao tocar áudio neural, usando fallback");
@@ -148,29 +148,29 @@ export function useVoice(): UseVoiceReturn {
   }, [speakBrowserFallback]);
 
   const stopSpeaking = useCallback(() => {
-    se (audioRef.atual) {
+    if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
     }
-    janela.sínteseDeFala?.cancelar();
+    window.speechSynthesis?.cancel();
     setIsSpeaking(false);
   }, []);
 
-  retornar {
-    está ouvindo,
-    está falando,
-    transcrição,
-    iniciarOuvindo,
-    pare de ouvir,
-    falar,
-    Pare de falar,
+  return {
+    isListening,
+    isSpeaking,
+    transcript,
+    startListening,
+    stopListening,
+    speak,
+    stopSpeaking,
   };
 }
 
-// Adicionar declarações de tipo para a API Web Speech
+// Add type declarations for Web Speech API
 declare global {
-  interface Janela {
-    Reconhecimento de fala: qualquer;
-    webkitSpeechRecognition: qualquer;
+  interface Window {
+    SpeechRecognition: any;
+    webkitSpeechRecognition: any;
   }
 }

@@ -31,7 +31,7 @@ export function Dashboard() {
           </div>
           <h1 className="text-4xl md:text-6xl lg:text-7xl font-extrabold text-foreground mb-6 tracking-tight leading-tight">
             Crie o Impossível com <br />
-            <span className="text-gradient-purple">Kojak IA</span>
+            <span className="text-gradient-purple">Kojak.AI</span>
           </h1>
           <p className="text-lg text-muted-foreground max-w-xl mx-auto leading-relaxed">
             Sua central de comando multimodal. Transforme ideias em código, imagens e vídeos cinematográficos em segundos.

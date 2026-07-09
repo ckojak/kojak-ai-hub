@@ -77,10 +77,10 @@ function EmptyState({ mode, onSuggestionClick }: { mode: string; onSuggestionCli
         </div>
 
         <h2 className="text-2xl font-bold text-gradient-purple mb-2">
-          Kojak IA
+          Kojak.AI
         </h2>
         <p className="text-muted-foreground mb-6">
-          Plataforma Multimodal de Inteligência Artificial
+          Plataforma Multimodal de Artificial Intelligence
         </p>
 
         <div className="glass-card rounded-2xl p-4 mb-6 neon-border">

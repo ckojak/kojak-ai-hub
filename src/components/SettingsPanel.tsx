@@ -6,6 +6,7 @@ import {
   Brain, 
   Plug, 
   Palette, 
+  Globe,
   MapPin, 
   User,
   Sun,
@@ -20,6 +21,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
+import { useLanguage, LANGUAGES } from "@/hooks/useLanguage";
 import { supabase } from "@/integrations/supabase/client";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
@@ -54,6 +56,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
 
   const { user, profile, signOut, updateProfile } = useAuth();
   const { theme, setTheme } = useTheme();
+  const { language, setLanguage, t } = useLanguage();
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -161,6 +164,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
     { id: "context", label: "Contexto Pessoal", icon: Brain },
     { id: "apps", label: "Apps Conectados", icon: Plug },
     { id: "theme", label: "Tema", icon: Palette },
+    { id: "language", label: "Idioma", icon: Globe },
     { id: "location", label: "Localização", icon: MapPin },
   ];
 
@@ -208,7 +212,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
           <div className="space-y-4">
             <h3 className="font-semibold">Contexto Pessoal</h3>
             <p className="text-sm text-muted-foreground">
-              Adicione informações que a Kojak IA deve lembrar sobre você para personalizar as respostas.
+              Adicione informações que a Kojak.AI deve lembrar sobre você para personalizar as respostas.
             </p>
             <Textarea
               value={personalContext}
@@ -278,6 +282,47 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                     <span className={cn(isActive && "text-primary font-medium")}>
                       {option.label}
                     </span>
+                    {isActive && (
+                      <div className="ml-auto w-2 h-2 rounded-full bg-primary" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+
+      case "language":
+        return (
+          <div className="space-y-4">
+            <h3 className="font-semibold">{t("language")}</h3>
+            <p className="text-sm text-muted-foreground">
+              {t("languageDescription")}
+            </p>
+            <div className="space-y-2">
+              {LANGUAGES.map((option) => {
+                const isActive = language === option.code;
+                const isPrimary = option.code === "pt";
+                return (
+                  <button
+                    key={option.code}
+                    onClick={() => setLanguage(option.code)}
+                    className={cn(
+                      "w-full flex items-center gap-3 p-4 rounded-xl transition-all",
+                      isActive
+                        ? "bg-primary/20 border border-primary/30"
+                        : "glass-card hover:bg-foreground/5"
+                    )}
+                  >
+                    <span className="text-xl">{option.flag}</span>
+                    <span className={cn(isActive && "text-primary font-medium")}>
+                      {option.label}
+                    </span>
+                    {isPrimary && (
+                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground bg-foreground/10 px-2 py-0.5 rounded-full">
+                        Principal
+                      </span>
+                    )}
                     {isActive && (
                       <div className="ml-auto w-2 h-2 rounded-full bg-primary" />
                     )}

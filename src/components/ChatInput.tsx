@@ -17,8 +17,10 @@ interface ChatInputProps {
   onStopSpeaking?: () => void;
   referenceImage?: string | null; // <--- NOVO: Recebe a imagem alvo
   onClearReference?: () => void;  // <--- NOVO: Função para limpar a imagem alvo
-  aiTier?: "fast" | "pro";
-  onTierChange?: (tier: "fast" | "pro") => void;
+  aiTier?: "basico" | "rapido" | "avancado" | "raciocinio";
+  onTierChange?: (tier: "basico" | "rapido" | "avancado" | "raciocinio") => void;
+  isLoggedIn?: boolean;
+  onRequireLogin?: () => void;
 }
 
 const modes = [
@@ -41,8 +43,10 @@ export function ChatInput({
   onStopSpeaking,
   referenceImage,
   onClearReference,
-  aiTier = "fast",
+  aiTier = "basico",
   onTierChange,
+  isLoggedIn = false,
+  onRequireLogin,
 }: ChatInputProps) {
   const [message, setMessage] = useState("");
   const [attachedImage, setAttachedImage] = useState<File | null>(null);
@@ -162,34 +166,41 @@ export function ChatInput({
           </div>
         )}
 
-        {/* Toggle de Tier: Rápido (econômico) vs Avançado (completo) */}
-        <div className="flex items-center justify-between gap-2 px-4 pt-3 pb-2 border-b border-border">
+        {/* Toggle de Tier: Básico / Rápido / Avançado / Raciocínio Premium */}
+        <div className="flex flex-col gap-1.5 px-4 pt-3 pb-2 border-b border-border">
           <span className="text-xs text-muted-foreground">Modo de IA:</span>
-          <div className="flex items-center gap-1 bg-foreground/5 rounded-full p-1">
-            <button
-              type="button"
-              onClick={() => onTierChange?.("fast")}
-              className={cn(
-                "px-3 py-1 rounded-full text-[11px] font-semibold transition-all duration-200",
-                aiTier === "fast"
-                  ? "bg-gradient-purple text-white glow-purple"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              ⚡ Rápido
-            </button>
-            <button
-              type="button"
-              onClick={() => onTierChange?.("pro")}
-              className={cn(
-                "px-3 py-1 rounded-full text-[11px] font-semibold transition-all duration-200",
-                aiTier === "pro"
-                  ? "bg-gradient-purple text-white glow-purple"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              🚀 Avançado
-            </button>
+          <div className="flex items-center gap-1 bg-foreground/5 rounded-full p-1 overflow-x-auto no-scrollbar">
+            {[
+              { id: "basico" as const, label: "Básico", emoji: "🟢", locked: false },
+              { id: "rapido" as const, label: "Rápido", emoji: "⚡", locked: false },
+              { id: "avancado" as const, label: "Avançado", emoji: "🚀", locked: true },
+              { id: "raciocinio" as const, label: "Raciocínio", emoji: "🧠", locked: true },
+            ].map((option) => {
+              const isActive = aiTier === option.id;
+              const isBlocked = option.locked && !isLoggedIn;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => {
+                    if (isBlocked) {
+                      onRequireLogin?.();
+                      return;
+                    }
+                    onTierChange?.(option.id);
+                  }}
+                  className={cn(
+                    "flex-shrink-0 px-3 py-1 rounded-full text-[11px] font-semibold transition-all duration-200 whitespace-nowrap",
+                    isActive
+                      ? "bg-gradient-purple text-white glow-purple"
+                      : "text-muted-foreground hover:text-foreground",
+                    isBlocked && "opacity-60"
+                  )}
+                >
+                  {option.emoji} {option.label} {isBlocked && "🔒"}
+                </button>
+              );
+            })}
           </div>
         </div>
 

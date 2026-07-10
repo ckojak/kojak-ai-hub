@@ -1,8 +1,15 @@
 import { useState, useEffect, useRef } from "react";
-import { Send, Code2, Camera, Play, MessageCircle, Loader2, Mic, MicOff, Volume2, VolumeX, Paperclip, X, Image as ImageIcon, Sparkles } from "lucide-react";
+import { Send, Code2, Camera, Play, MessageCircle, Loader2, Mic, MicOff, Volume2, VolumeX, Paperclip, X, Image as ImageIcon, Sparkles, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+
+const TIER_OPTIONS = [
+  { id: "basico" as const, label: "Básico", emoji: "🟢", locked: false },
+  { id: "rapido" as const, label: "Rápido", emoji: "⚡", locked: false },
+  { id: "avancado" as const, label: "Avançado", emoji: "🚀", locked: true },
+  { id: "raciocinio" as const, label: "Raciocínio", emoji: "🧠", locked: true },
+];
 
 interface ChatInputProps {
   onSend: (message: string, mode: string, imageUrl?: string) => void;
@@ -49,6 +56,8 @@ export function ChatInput({
   onRequireLogin,
 }: ChatInputProps) {
   const [message, setMessage] = useState("");
+  const [tierMenuOpen, setTierMenuOpen] = useState(false);
+  const tierMenuRef = useRef<HTMLDivElement>(null);
   const [attachedImage, setAttachedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -60,6 +69,17 @@ export function ChatInput({
       setMessage(voiceTranscript);
     }
   }, [voiceTranscript]);
+
+  useEffect(() => {
+    if (!tierMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (tierMenuRef.current && !tierMenuRef.current.contains(e.target as Node)) {
+        setTierMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [tierMenuOpen]);
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -167,41 +187,51 @@ export function ChatInput({
         )}
 
         {/* Toggle de Tier: Básico / Rápido / Avançado / Raciocínio Premium */}
-        <div className="flex flex-col gap-1.5 px-4 pt-3 pb-2 border-b border-border">
-          <span className="text-xs text-muted-foreground">Modo de IA:</span>
-          <div className="flex items-center gap-1 bg-foreground/5 rounded-full p-1 overflow-x-auto no-scrollbar">
-            {[
-              { id: "basico" as const, label: "Básico", emoji: "🟢", locked: false },
-              { id: "rapido" as const, label: "Rápido", emoji: "⚡", locked: false },
-              { id: "avancado" as const, label: "Avançado", emoji: "🚀", locked: true },
-              { id: "raciocinio" as const, label: "Raciocínio", emoji: "🧠", locked: true },
-            ].map((option) => {
-              const isActive = aiTier === option.id;
-              const isBlocked = option.locked && !isLoggedIn;
-              return (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={() => {
-                    if (isBlocked) {
-                      onRequireLogin?.();
-                      return;
-                    }
-                    onTierChange?.(option.id);
-                  }}
-                  className={cn(
-                    "flex-shrink-0 px-3 py-1 rounded-full text-[11px] font-semibold transition-all duration-200 whitespace-nowrap",
-                    isActive
-                      ? "bg-gradient-purple text-white glow-purple"
-                      : "text-muted-foreground hover:text-foreground",
-                    isBlocked && "opacity-60"
-                  )}
-                >
-                  {option.emoji} {option.label} {isBlocked && "🔒"}
-                </button>
-              );
-            })}
-          </div>
+        <div className="relative px-4 pt-3 pb-2 border-b border-border" ref={tierMenuRef}>
+          <button
+            type="button"
+            onClick={() => setTierMenuOpen((v) => !v)}
+            className="flex items-center justify-between w-full text-left"
+          >
+            <span className="text-xs text-muted-foreground">Modo de IA:</span>
+            <span className="flex items-center gap-1 text-xs font-semibold text-primary">
+              {TIER_OPTIONS.find((o) => o.id === aiTier)?.emoji}{" "}
+              {TIER_OPTIONS.find((o) => o.id === aiTier)?.label}
+              <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", tierMenuOpen && "rotate-180")} />
+            </span>
+          </button>
+
+          {tierMenuOpen && (
+            <div className="absolute left-4 right-4 top-full mt-1 z-20 bg-background border border-border rounded-xl shadow-lg overflow-hidden animate-fade-in">
+              {TIER_OPTIONS.map((option) => {
+                const isActive = aiTier === option.id;
+                const isBlocked = option.locked && !isLoggedIn;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => {
+                      setTierMenuOpen(false);
+                      if (isBlocked) {
+                        onRequireLogin?.();
+                        return;
+                      }
+                      onTierChange?.(option.id);
+                    }}
+                    className={cn(
+                      "flex items-center justify-between w-full px-4 py-3 text-sm transition-colors",
+                      isActive ? "bg-primary/15 text-primary font-semibold" : "text-foreground hover:bg-foreground/5",
+                      isBlocked && "opacity-60"
+                    )}
+                  >
+                    <span>{option.emoji} {option.label}</span>
+                    {isBlocked && <span className="text-xs">🔒 Login</span>}
+                    {isActive && !isBlocked && <span className="w-2 h-2 rounded-full bg-primary" />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div className="hidden md:flex items-center gap-1 px-4 pt-3 pb-2 border-b border-border">

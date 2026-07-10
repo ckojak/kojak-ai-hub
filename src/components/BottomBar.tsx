@@ -1,4 +1,4 @@
-import { Code2, Camera, Play, MessageCircle, History, Settings, HeartPulse } from "lucide-react";
+import { Code2, Camera, Play, MessageCircle, History, Settings, HeartPulse, Radio } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface BottomBarProps {
@@ -6,6 +6,7 @@ interface BottomBarProps {
   onModeChange: (mode: string) => void;
   onOpenHistory: () => void;
   onOpenSettings: () => void;
+  onOpenLive?: () => void;
 }
 
 const modes = [
@@ -16,14 +17,14 @@ const modes = [
   { id: "saude", label: "Saúde", icon: HeartPulse },
 ];
 
-export function BottomBar({ activeMode, onModeChange, onOpenHistory, onOpenSettings }: BottomBarProps) {
+export function BottomBar({ activeMode, onModeChange, onOpenHistory, onOpenSettings, onOpenLive }: BottomBarProps) {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden">
       {/* Glassmorphism background */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/80 to-transparent backdrop-blur-xl" />
+      <div className="absolute inset-0 bg-gradient-to-t from-background/95 via-background/80 to-transparent backdrop-blur-xl" />
       
       {/* Content */}
-      <div className="relative flex items-center justify-around px-2 py-3 safe-area-inset-bottom">
+      <div className="relative flex items-center justify-around px-2 py-3 safe-area-inset-bottom overflow-x-auto no-scrollbar">
         {/* History Button */}
         <button
           onClick={onOpenHistory}
@@ -31,6 +32,15 @@ export function BottomBar({ activeMode, onModeChange, onOpenHistory, onOpenSetti
         >
           <History className="w-5 h-5" />
           <span className="text-[10px] font-medium">Histórico</span>
+        </button>
+
+        {/* Live Button */}
+        <button
+          onClick={onOpenLive}
+          className="flex flex-col items-center gap-1 px-3 py-2 text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <Radio className="w-5 h-5" />
+          <span className="text-[10px] font-medium">Live</span>
         </button>
 
         {/* Mode buttons */}

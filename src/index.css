@@ -1,322 +1,387 @@
-import { useState, useCallback, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { Sidebar } from "@/components/Sidebar";
-import { ChatArea } from "@/components/ChatArea";
-import { BottomBar } from "@/components/BottomBar";
-import { MobileHistorySheet } from "@/components/MobileHistorySheet";
-import { SettingsPanel } from "@/components/SettingsPanel";
-import { KojakLive } from "@/components/KojakLive";
-import { useChats, Message } from "@/hooks/useChats";
-import { useVoice } from "@/hooks/useVoice";
-import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+/* Kojak IA - Futuristic Hi-Tech Dark Theme */
 
-const modeConfig: Record<string, { function: string; streams: boolean }> = {
-  chat: { function: "kojak-code", streams: true },
-  code: { function: "kojak-code", streams: true },
-  vision: { function: "kojak-vision", streams: false },
-  motion: { function: "kojak-motion", streams: false },
-  saude: { function: "kojak-saude", streams: true },
-};
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
-const Index = () => {
-  const [activeMode, setActiveMode] = useState("chat");
-  const [aiTier, setAiTier] = useState<"basico" | "rapido" | "avancado" | "raciocinio">("basico");
-  const [isLoading, setIsLoading] = useState(false);
-  const [streamingContent, setStreamingContent] = useState<string>("");
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [liveOpen, setLiveOpen] = useState(false);
-  const [localMessages, setLocalMessages] = useState<Message[]>([]);
-  const [referenceImage, setReferenceImage] = useState<string | null>(null);
+@layer base {
+  :root {
+    --background: 240 10% 3%;
+    --foreground: 0 0% 98%;
 
-  const { user, loading: authLoading, profile } = useAuth();
-  const navigate = useNavigate();
-  const { chats, currentChat, messages: dbMessages, createChat, selectChat, deleteChat, addMessage, updateChatTitle } = useChats();
-  const { isListening, isSpeaking, transcript, startListening, stopListening, speak, stopSpeaking } = useVoice();
-  const { toast } = useToast();
+    --card: 240 10% 5%;
+    --card-foreground: 0 0% 98%;
 
-  const baseMessages = user && currentChat ? dbMessages : localMessages;
-  const messages: Message[] = streamingContent
-    ? [...baseMessages, {
-        id: "streaming",
-        chat_id: "streaming",
-        role: "assistant",
-        content: streamingContent,
-        type: "text",
-        created_at: new Date().toISOString(),
-      }]
-    : baseMessages;
+    --popover: 240 10% 5%;
+    --popover-foreground: 0 0% 98%;
 
-  const logActivity = useCallback(async (action: string, details?: any) => {
-    if (!user) return;
-    await supabase.from("activity_log").insert({ user_id: user.id, action, details });
-  }, [user]);
+    --primary: 270 91% 65%;
+    --primary-foreground: 0 0% 100%;
 
-  const streamFromFunction = useCallback(async (fnName: string, payload: any): Promise<string> => {
-    const url = `${SUPABASE_URL}/functions/v1/${fnName}`;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
-        apikey: SUPABASE_PUBLISHABLE_KEY,
-      },
-      body: JSON.stringify({ ...payload, stream: true }),
-    });
+    --secondary: 220 70% 55%;
+    --secondary-foreground: 0 0% 100%;
 
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      try {
-        const errJson = JSON.parse(errText);
-        const err = new Error(errJson.error || `HTTP ${res.status}`) as Error & {
-          requiresLogin?: boolean;
-          upgradeRequired?: boolean;
-        };
-        err.requiresLogin = !!errJson.requiresLogin;
-        err.upgradeRequired = !!errJson.upgradeRequired;
-        throw err;
-      } catch (parseErr) {
-        if (parseErr instanceof Error && "requiresLogin" in parseErr) throw parseErr;
-        throw new Error(errText || `HTTP ${res.status}`);
-      }
-    }
+    --muted: 240 5% 18%;
+    --muted-foreground: 240 5% 60%;
 
-    if (!res.body) throw new Error("Resposta sem corpo");
+    --accent: 270 91% 65%;
+    --accent-foreground: 0 0% 100%;
 
-    const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
-    let buffer = "";
-    let full = "";
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
 
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += value;
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith("data:")) continue;
-        const data = trimmed.slice(5).trim();
-        if (data === "[DONE]") continue;
-        try {
-          const parsed = JSON.parse(data);
-          const delta = parsed.choices?.[0]?.delta?.content;
-          if (typeof delta === "string" && delta.length > 0) {
-            full += delta;
-            setStreamingContent(full);
-          }
-        } catch {
-          /* ignore parse errors */
-        }
-      }
-    }
+    --border: 240 5% 18%;
+    --input: 240 5% 18%;
+    --ring: 270 91% 65%;
 
-    return full;
-  }, []);
+    --radius: 1rem;
 
-  const handleSendMessage = useCallback(async (content: string, mode: string, imageUrl?: string) => {
-    if (!content.trim() && !imageUrl && !referenceImage) return;
+    /* Kojak Hi-Tech Colors */
+    --kojak-purple: 270 91% 65%;
+    --kojak-purple-glow: 270 100% 70%;
+    --kojak-blue: 220 70% 55%;
+    --kojak-blue-glow: 220 100% 65%;
+    --kojak-charcoal: 240 8% 8%;
+    --kojak-dark: 240 10% 3%;
+    --kojak-surface: 240 8% 10%;
+    --kojak-border: 240 5% 20%;
+    --kojak-text-secondary: 240 5% 55%;
+    
+    /* Glass effect */
+    --glass-bg: 240 10% 10%;
+    --glass-border: 240 5% 25%;
+    --bubble-ai-bg: 240 8% 16%;
 
-    let chatId = currentChat?.id;
+    /* Gradients */
+    --gradient-purple: linear-gradient(135deg, hsl(270, 91%, 65%) 0%, hsl(280, 100%, 50%) 100%);
+    --gradient-blue: linear-gradient(135deg, hsl(220, 70%, 55%) 0%, hsl(260, 80%, 60%) 100%);
+    --gradient-glow: linear-gradient(135deg, hsl(270, 91%, 65%) 0%, hsl(300, 100%, 60%) 50%, hsl(270, 91%, 65%) 100%);
+    --gradient-dark: linear-gradient(180deg, hsl(240, 10%, 6%) 0%, hsl(240, 10%, 3%) 100%);
+    --gradient-glass: linear-gradient(135deg, hsla(240, 10%, 15%, 0.6) 0%, hsla(240, 10%, 10%, 0.4) 100%);
 
-    if (user) {
-      if (!chatId) {
-        const newChat = await createChat(mode);
-        if (!newChat) {
-          toast({ title: "Erro", description: "Não foi possível criar a conversa", variant: "destructive" });
-          return;
-        }
-        chatId = newChat.id;
-      }
-      await addMessage("user", content, imageUrl ? "image" : "text", imageUrl);
-      await logActivity(`Mensagem enviada no modo ${mode}`, { preview: content.slice(0, 100) });
-    } else {
-      if (localMessages.length === 0) {
-        toast({
-          title: "Faça login para salvar suas conversas",
-          description: "Sem login, esta conversa será perdida ao recarregar a página.",
-        });
-      }
-      const userMessage: Message = {
-        id: Date.now().toString(),
-        chat_id: "local",
-        role: "user",
-        content,
-        type: imageUrl ? "image" : "text",
-        media_url: imageUrl,
-        created_at: new Date().toISOString(),
-      };
-      setLocalMessages(prev => [...prev, userMessage]);
-    }
+    /* Shadows */
+    --shadow-glow: 0 0 20px hsl(270, 91%, 65%, 0.3);
+    --shadow-glow-lg: 0 0 40px hsl(270, 91%, 65%, 0.4);
+    --shadow-glow-blue: 0 0 20px hsl(220, 70%, 55%, 0.3);
+    --shadow-subtle: 0 4px 20px hsl(0, 0%, 0%, 0.4);
+    --shadow-neon: 0 0 30px hsl(270, 91%, 65%, 0.5), inset 0 0 20px hsl(270, 91%, 65%, 0.1);
 
-    setIsLoading(true);
-    setStreamingContent("");
-
-    try {
-      const config = modeConfig[mode] || modeConfig.chat;
-      const personalContext = profile?.personal_context || "";
-      const recentHistory = baseMessages.slice(-10).map((m) => ({ role: m.role, content: m.content }));
-
-      const payload = {
-        prompt: content,
-        context: personalContext,
-        history: recentHistory,
-        image: imageUrl,
-        reference_image: referenceImage,
-        tier: aiTier,
-        userId: user?.id ?? null,
-      };
-
-      if (config.streams) {
-        const fullText = await streamFromFunction(config.function, payload);
-        setReferenceImage(null);
-
-        const matches = [...fullText.matchAll(/```(\w+)?\n([\s\S]*?)```/g)];
-        const responseType = matches.length > 0 ? "code" : "text";
-
-        if (user && chatId) {
-          await addMessage("assistant", fullText, responseType);
-          if (dbMessages.length === 0) {
-            const title = content ? content.slice(0, 50) + (content.length > 50 ? "..." : "") : "Nova Conversa";
-            await updateChatTitle(chatId, title);
-          }
-        } else {
-          setLocalMessages(prev => [...prev, {
-            id: (Date.now() + 1).toString(),
-            chat_id: "local",
-            role: "assistant",
-            content: fullText,
-            type: responseType,
-            created_at: new Date().toISOString(),
-          }]);
-        }
-        setStreamingContent("");
-      } else {
-        // Non-streaming (Vision, Motion)
-        const { data, error } = await supabase.functions.invoke(config.function, { body: payload });
-        setReferenceImage(null);
-        if (error) throw new Error(error.message || "Erro ao processar requisição");
-        if (data.error) throw new Error(data.error);
-
-        if (user && chatId) {
-          await addMessage("assistant", data.content, data.type || "text", data.mediaUrl);
-          if (dbMessages.length === 0) {
-            const title = content ? content.slice(0, 50) + (content.length > 50 ? "..." : "") : "Imagem Enviada";
-            await updateChatTitle(chatId, title);
-          }
-        } else {
-          setLocalMessages(prev => [...prev, {
-            id: (Date.now() + 1).toString(),
-            chat_id: "local",
-            role: "assistant",
-            content: data.content,
-            type: data.type || "text",
-            media_url: data.mediaUrl,
-            created_at: new Date().toISOString(),
-          }]);
-        }
-      }
-    } catch (error) {
-      console.error("Erro ao enviar mensagem:", error);
-      const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
-      const requiresLogin = error instanceof Error && (error as any).requiresLogin;
-
-      toast({ title: requiresLogin ? "Faça login para continuar" : "Erro", description: errorMessage, variant: "destructive" });
-      setStreamingContent("");
-
-      if (requiresLogin) {
-        setTimeout(() => navigate("/auth"), 1200);
-      }
-
-      const errorAssistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        chat_id: chatId || "local",
-        role: "assistant",
-        content: `Desculpe, ocorreu um erro: ${errorMessage}. Por favor, tente novamente.`,
-        type: "text",
-        created_at: new Date().toISOString(),
-      };
-      if (user && chatId) {
-        await addMessage("assistant", errorAssistantMessage.content, "text");
-      } else {
-        setLocalMessages(prev => [...prev, errorAssistantMessage]);
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }, [user, currentChat, createChat, addMessage, updateChatTitle, dbMessages, profile, toast, logActivity, referenceImage, localMessages.length, baseMessages, streamFromFunction, aiTier, navigate]);
-
-  const handleNewChat = useCallback(async () => {
-    if (user) await createChat(activeMode);
-    setLocalMessages([]);
-    setStreamingContent("");
-  }, [user, createChat, activeMode]);
-
-  const handleModeChange = useCallback((mode: string) => setActiveMode(mode), []);
-
-  const handleOpenLive = useCallback(() => {
-    if (!user) {
-      toast({ title: "Faça login para continuar", description: "O Kojak Live exige login." });
-      navigate("/auth");
-      return;
-    }
-    setLiveOpen(true);
-  }, [user, navigate, toast]);
-
-  if (authLoading) {
-    return (
-      <div className="h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-muted-foreground">Carregando...</p>
-        </div>
-      </div>
-    );
+    --sidebar-background: 240 10% 4%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-primary: 270 91% 65%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 8% 12%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 240 5% 18%;
+    --sidebar-ring: 270 91% 65%;
   }
 
-  return (
-    <div className="h-screen bg-background flex flex-col overflow-hidden">
-      <Sidebar chats={chats} currentChatId={currentChat?.id} onSelectChat={selectChat} onNewChat={handleNewChat} onDeleteChat={deleteChat} onOpenSettings={() => setSettingsOpen(true)} onOpenLive={handleOpenLive} />
-      <MobileHistorySheet open={historyOpen} onOpenChange={setHistoryOpen} chats={chats} currentChatId={currentChat?.id} onSelectChat={selectChat} onNewChat={handleNewChat} onDeleteChat={deleteChat} />
-      <SettingsPanel open={settingsOpen} onOpenChange={setSettingsOpen} />
-      {liveOpen && <KojakLive onClose={() => setLiveOpen(false)} />}
+  .dark {
+    --background: 240 10% 3%;
+    --foreground: 0 0% 98%;
+  }
 
-      <main className="flex-1 relative overflow-hidden md:ml-72 transition-all duration-300">
-        <ChatArea
-          messages={messages}
-          isLoading={isLoading && !streamingContent}
-          activeMode={activeMode}
-          onModeChange={handleModeChange}
-          onSendMessage={handleSendMessage}
-          voiceTranscript={transcript}
-          isListening={isListening}
-          isSpeaking={isSpeaking}
-          onStartListening={startListening}
-          onStopListening={stopListening}
-          onSpeak={speak}
-          onStopSpeaking={stopSpeaking}
-          referenceImage={referenceImage}
-          onSelectReference={setReferenceImage}
-          onClearReference={() => setReferenceImage(null)}
-          aiTier={aiTier}
-          onTierChange={setAiTier}
-          isLoggedIn={!!user}
-          onRequireLogin={() => {
-            toast({ title: "Faça login para continuar", description: "Esse modo exige login. Redirecionando..." });
-            setTimeout(() => navigate("/auth"), 800);
-          }}
-        />
-      </main>
+  .light {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 10%;
+    --card: 0 0% 98%;
+    --card-foreground: 240 10% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 10%;
+    --primary: 270 91% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 70% 50%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 240 5% 92%;
+    --muted-foreground: 240 5% 40%;
+    --accent: 270 91% 55%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 5% 85%;
+    --input: 240 5% 90%;
+    --ring: 270 91% 55%;
+    --glass-bg: 240 10% 95%;
+    --glass-border: 240 5% 80%;
+    --bubble-ai-bg: 240 10% 88%;
+    --kojak-surface: 240 8% 96%;
+    --kojak-border: 240 5% 85%;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 10% 10%;
+    --sidebar-border: 240 5% 90%;
+  }
+}
 
-      <BottomBar activeMode={activeMode} onModeChange={handleModeChange} onOpenHistory={() => setHistoryOpen(true)} onOpenSettings={() => setSettingsOpen(true)} onOpenLive={handleOpenLive} />
-    </div>
-  );
-};
+@layer base {
+  * {
+    @apply border-border;
+  }
 
-export default Index;
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', sans-serif;
+    background: radial-gradient(ellipse 80% 50% at 50% -20%, hsl(270, 50%, 15%, 0.4), transparent),
+                radial-gradient(ellipse 60% 40% at 100% 100%, hsl(220, 50%, 15%, 0.3), transparent),
+                hsl(var(--background));
+    min-height: 100vh;
+  }
+
+  code, pre {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+@layer utilities {
+  /* Glassmorphism */
+  .glass-card {
+    background: hsla(var(--glass-bg) / 0.6);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid hsla(var(--glass-border) / 0.3);
+  }
+
+  .glass-card-strong {
+    background: hsla(var(--glass-bg) / 0.8);
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
+    border: 1px solid hsla(var(--glass-border) / 0.4);
+    box-shadow: var(--shadow-subtle);
+  }
+
+  /* User message bubble */
+  .bubble-user {
+    background: linear-gradient(135deg, hsl(270, 91%, 55%) 0%, hsl(280, 90%, 45%) 100%);
+    box-shadow: 0 4px 15px hsl(270, 91%, 50%, 0.3);
+  }
+
+  /* AI message bubble */
+  .bubble-ai {
+    background: hsla(var(--bubble-ai-bg) / 0.92);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid hsla(var(--glass-border) / 0.4);
+  }
+
+  /* Gradients */
+  .text-gradient-purple {
+    background: linear-gradient(135deg, hsl(270, 91%, 65%) 0%, hsl(300, 100%, 60%) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .text-gradient-blue {
+    background: linear-gradient(135deg, hsl(220, 70%, 55%) 0%, hsl(260, 80%, 60%) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .bg-gradient-purple {
+    background: linear-gradient(135deg, hsl(270, 91%, 65%) 0%, hsl(280, 100%, 50%) 100%);
+  }
+
+  .bg-gradient-blue {
+    background: linear-gradient(135deg, hsl(220, 70%, 55%) 0%, hsl(260, 80%, 60%) 100%);
+  }
+
+  .bg-gradient-mesh {
+    background: 
+      radial-gradient(ellipse 80% 50% at 50% -20%, hsl(270, 50%, 20%, 0.5), transparent),
+      radial-gradient(ellipse 60% 40% at 100% 100%, hsl(220, 50%, 20%, 0.4), transparent),
+      hsl(var(--background));
+  }
+
+  /* Glow effects */
+  .glow-purple {
+    box-shadow: 0 0 20px hsl(270, 91%, 65%, 0.3);
+  }
+
+  .glow-purple-lg {
+    box-shadow: 0 0 40px hsl(270, 91%, 65%, 0.4);
+  }
+
+  .glow-blue {
+    box-shadow: 0 0 20px hsl(220, 70%, 55%, 0.3);
+  }
+
+  .border-glow {
+    border: 1px solid hsl(270, 91%, 65%, 0.3);
+  }
+
+  .border-glow-blue {
+    border: 1px solid hsl(220, 70%, 55%, 0.3);
+  }
+
+  /* Neon border */
+  .neon-border {
+    position: relative;
+  }
+
+  .neon-border::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, hsl(270, 91%, 65%, 0.5), hsl(220, 70%, 55%, 0.3), transparent);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  /* Animations */
+  .animate-glow {
+    animation: glow 2s ease-in-out infinite alternate;
+  }
+
+  .animate-pulse-slow {
+    animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.4s ease-out;
+  }
+
+  .animate-slide-up {
+    animation: slide-up 0.4s ease-out;
+  }
+
+  .animate-scale-in {
+    animation: scale-in 0.3s ease-out;
+  }
+
+  /* Scrollbar */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Safe area for mobile */
+  .safe-area-inset-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+}
+
+/* Keyframe animations */
+@keyframes glow {
+  from {
+    box-shadow: 0 0 20px hsl(270, 91%, 65%, 0.2);
+  }
+  to {
+    box-shadow: 0 0 30px hsl(270, 91%, 65%, 0.4);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Custom scrollbar for chat */
+.chat-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-scrollbar::-webkit-scrollbar-thumb {
+  background: hsl(240, 5%, 25%);
+  border-radius: 3px;
+}
+
+.chat-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: hsl(270, 91%, 65%, 0.5);
+}
+
+/* Code block styling */
+.code-block {
+  background-color: hsl(var(--kojak-surface));
+  border-radius: 0.75rem;
+  border: 1px solid hsl(var(--kojak-border));
+  overflow: hidden;
+}
+
+.code-block pre {
+  padding: 1rem;
+  overflow-x: auto;
+  font-size: 0.875rem;
+}
+
+/* Markdown prose styling */
+.prose-kojak {
+  --tw-prose-body: hsl(var(--foreground));
+  --tw-prose-headings: hsl(var(--foreground));
+  --tw-prose-links: hsl(var(--primary));
+  --tw-prose-code: hsl(var(--primary));
+  --tw-prose-pre-bg: hsl(var(--kojak-surface));
+}
+
+.prose-kojak code:not(pre code) {
+  background: hsl(var(--kojak-surface));
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  font-size: 0.875em;
+}
+
+.prose-kojak pre {
+  background: hsl(var(--kojak-surface));
+  border: 1px solid hsl(var(--kojak-border));
+  border-radius: 0.75rem;
+}
+
+/* Voice button pulse */
+.voice-pulse {
+  animation: voice-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes voice-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 hsl(270, 91%, 65%, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 10px hsl(270, 91%, 65%, 0);
+  }
+}

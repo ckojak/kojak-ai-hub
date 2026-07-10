@@ -354,9 +354,17 @@
 .prose-kojak {
   --tw-prose-body: hsl(var(--foreground));
   --tw-prose-headings: hsl(var(--foreground));
+  --tw-prose-bold: hsl(var(--foreground));
   --tw-prose-links: hsl(var(--primary));
   --tw-prose-code: hsl(var(--primary));
   --tw-prose-pre-bg: hsl(var(--kojak-surface));
+  --tw-prose-bullets: hsl(var(--foreground));
+  --tw-prose-counters: hsl(var(--foreground));
+  --tw-prose-quotes: hsl(var(--foreground));
+  --tw-prose-quote-borders: hsl(var(--border));
+  --tw-prose-hr: hsl(var(--border));
+  --tw-prose-th-borders: hsl(var(--border));
+  --tw-prose-td-borders: hsl(var(--border));
 }
 
 .prose-kojak code:not(pre code) {

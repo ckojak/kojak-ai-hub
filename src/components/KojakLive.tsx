@@ -134,7 +134,7 @@ export function KojakLive({ onClose }: KojakLiveProps) {
 
         // 4. Abre o WebSocket direto com a Gemini, usando o token efêmero (não a chave real)
         const ws = new WebSocket(
-          `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?access_token=${token}`
+          `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained?access_token=${token}`
         );
         wsRef.current = ws;
 

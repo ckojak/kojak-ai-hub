@@ -3,6 +3,7 @@ import { ChatMessage, Message } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { TypingIndicator } from "./TypingIndicator";
 import { Sparkles, Code2, Camera, Play, MessageCircle, HeartPulse } from "lucide-react";
+import { KOJAK_LOGO_BASE64 } from "@/assets/kojak-logo";
 import { cn } from "@/lib/utils";
 
 interface ChatAreaProps {
@@ -21,8 +22,10 @@ interface ChatAreaProps {
   referenceImage?: string | null;
   onSelectReference?: (url: string) => void;
   onClearReference?: () => void;
-  aiTier?: "fast" | "pro";
-  onTierChange?: (tier: "fast" | "pro") => void;
+  aiTier?: "basico" | "rapido" | "avancado" | "raciocinio";
+  onTierChange?: (tier: "basico" | "rapido" | "avancado" | "raciocinio") => void;
+  isLoggedIn?: boolean;
+  onRequireLogin?: () => void;
 }
 
 const modeInfo = {
@@ -71,14 +74,11 @@ function EmptyState({ mode, onSuggestionClick }: { mode: string; onSuggestionCli
       <div className="text-center max-w-md animate-fade-in">
         <div className="relative w-20 h-20 mx-auto mb-6">
           <div className="absolute inset-0 bg-gradient-purple rounded-2xl blur-xl opacity-50 animate-pulse-slow" />
-          <div className="relative w-full h-full rounded-2xl bg-gradient-purple flex items-center justify-center glow-purple-lg">
-            <Sparkles className="w-10 h-10 text-white" />
+          <div className="relative w-full h-full rounded-2xl bg-gradient-purple flex items-center justify-center glow-purple-lg overflow-hidden">
+            <img src={KOJAK_LOGO_BASE64} alt="Kojak.AI" className="w-full h-full object-cover" />
           </div>
         </div>
 
-        <h2 className="text-2xl font-bold text-gradient-purple mb-2">
-          Kojak.AI
-        </h2>
         <p className="text-muted-foreground mb-6">
           Plataforma Multimodal de Artificial Intelligence
         </p>
@@ -128,6 +128,8 @@ export function ChatArea({
   onClearReference,
   aiTier,
   onTierChange,
+  isLoggedIn,
+  onRequireLogin,
 }: ChatAreaProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -179,6 +181,8 @@ export function ChatArea({
         onClearReference={onClearReference} // <--- REPASSE PARA O VISOR DO INPUT
         aiTier={aiTier}
         onTierChange={onTierChange}
+        isLoggedIn={isLoggedIn}
+        onRequireLogin={onRequireLogin}
       />
     </div>
   );

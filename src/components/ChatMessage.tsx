@@ -1,4 +1,5 @@
-import { Download, Copy, Check, User, Sparkles, Volume2, ImagePlus, X, Maximize2 } from "lucide-react";
+import { Download, Copy, Check, User, Volume2, ImagePlus, X, Maximize2 } from "lucide-react";
+import { KOJAK_LOGO_BASE64 } from "@/assets/kojak-logo";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
@@ -56,8 +57,8 @@ export function ChatMessage({ message, onSpeak, onSelectReference }: ChatMessage
 
   return (
     <div className={cn("flex gap-3 animate-fade-in", isUser ? "flex-row-reverse" : "flex-row")}>
-      <div className={cn("flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center", isUser ? "bg-gradient-purple glow-purple" : "bg-gradient-to-br from-primary/40 to-secondary/30 border border-primary/30")}>
-        {isUser ? <User className="w-5 h-5 text-white" /> : <Sparkles className="w-5 h-5 text-primary" />}
+      <div className={cn("flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center overflow-hidden", isUser ? "bg-gradient-purple glow-purple" : "bg-gradient-to-br from-primary/40 to-secondary/30 border border-primary/30")}>
+        {isUser ? <User className="w-5 h-5 text-white" /> : <img src={KOJAK_LOGO_BASE64} alt="Kojak.AI" className="w-full h-full object-cover" />}
       </div>
 
       <div className={cn("max-w-[85%] md:max-w-[75%] rounded-2xl px-4 py-3", isUser ? "bubble-user text-white rounded-tr-sm" : "bubble-ai rounded-tl-sm")}>

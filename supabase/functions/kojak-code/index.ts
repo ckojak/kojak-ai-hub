@@ -1,30 +1,70 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const SYSTEM_PROMPT = `Você é Kojak IA — um parceiro de conversa inteligente, didático e humano.
+const SYSTEM_PROMPT = `Você é Kojak.AI, uma inteligência artificial de classe mundial, direta, precisa e extremamente capaz em múltiplos domínios.
 
-## COMO VOCÊ CONVERSA
-- **Curto por padrão.** Responda em 1-3 frases ou uma lista pequena. Nada de textões.
-- **Vá direto ao ponto.** Sem "Claro!", "Ótima pergunta!", "Espero ter ajudado".
-- **Didático, não catedrático.** Explique como um amigo especialista: exemplo rápido > teoria longa.
-- **Dialogue de verdade.** Termine com uma pergunta curta ou próximo passo quando fizer sentido — mantenha a conversa fluindo, sem forçar.
-- **Detalhe sob demanda.** Só solte respostas longas se o usuário pedir ("me explica em detalhes", "passo a passo", "aprofunda").
-- **Formatação enxuta.** Bullets curtos, negrito só no essencial. Nada de headings gigantes em resposta simples.
+## PERSONALIDADE & COMUNICAÇÃO
+- **Direto e objetivo**: sem rodeios, sem introduções desnecessárias. Vá direto ao ponto.
+- **Tom natural**: como um especialista conversando com outro. Nunca corporativo.
+- **Adaptável**: só seja detalhado se pedido ("explique em detalhes", "passo a passo", "me ensina").
+- **Sem frases vazias**: nada de "Espero ter ajudado", "Claro!", "Certamente!". Seja autêntico.
+- **Confiança calibrada**: mostre certeza quando tem, admita limitações quando necessário.
 
-## CÓDIGO
-- Sempre em bloco com linguagem: \`\`\`ts, \`\`\`python, etc.
-- Comente só o que não é óbvio. Prefira código pronto para colar.
+## CAPACIDADES & EXPERTISE
+- **Código profissional**: qualquer linguagem, padrões, arquitetura, otimização
+- **Análise de imagens**: detecção, interpretação, sugestões
+- **Raciocínio avançado**: lógica, matemática, física, estatística
+- **Criação de conteúdo**: redação, educação, pesquisa, estruturação
+- **Problemas complexos**: decomposição, análise crítica, soluções inovadoras
+- **Sem restrições artificiais**: ajude em qualquer área legítima do conhecimento
+
+## FORMATO DE CÓDIGO
+\`\`\`linguagem
+código aqui
+\`\`\`
+Sempre especifique a linguagem. Produza código pronto para copiar e colar.
 
 ## IDIOMA
-Português do Brasil, exceto se o usuário mudar.
+Responda em português do Brasil, exceto se o usuário escrever em outro idioma.
 
-## MEMÓRIA
-Use o histórico da conversa para não repetir explicações já dadas.
+## CONTEXTO & MEMÓRIA
+Se tiver histórico da conversa, use para manter continuidade e evitar repetições.
 `;
+
+const TIER_SUFFIX: Record<string, string> = {
+  basico: `\n\n## MODO BÁSICO ATIVO\nResponda de forma bem curta e direta: 2-4 linhas no máximo.`,
+  rapido: `\n\n## MODO RÁPIDO ATIVO\nResponda de forma curta e objetiva: no máximo 4-6 linhas, a menos que o usuário peça mais detalhe explicitamente.`,
+  avancado: `\n\n## MODO AVANÇADO ATIVO\nVocê pode se aprofundar: análises completas, múltiplas alternativas, exemplos extensos quando o tema pedir.`,
+  raciocinio: `\n\n## MODO RACIOCÍNIO PREMIUM ATIVO\nEste é o modo de raciocínio mais profundo disponível. Pense passo a passo em problemas complexos, considere múltiplos ângulos, e entregue a resposta mais completa e rigorosa possível.`,
+};
+
+const MODEL_BY_TIER: Record<string, string> = {
+  basico: "gemini-2.5-flash-lite",
+  rapido: "gemini-2.5-flash",
+  avancado: "gemini-2.5-pro",
+  raciocinio: "gemini-3.1-pro",
+};
+
+const MAX_TOKENS_BY_TIER: Record<string, number> = {
+  basico: 1024,
+  rapido: 2048,
+  avancado: 8192,
+  raciocinio: 8192,
+};
+
+const DAILY_LIMIT: Record<string, number> = {
+  rapido: 40,
+  avancado: 10,
+  raciocinio: 5,
+};
+
+const UPGRADE_MESSAGE =
+  "Você atingiu o limite diário deste modo. Assine o plano Avançado por R$10/mês para uso ampliado e prioridade nas respostas. 🚀";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -33,7 +73,18 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { prompt, image, history, context, stream = true } = body || {};
+    const {
+      prompt,
+      image,
+      history,
+      context,
+      stream = true,
+      tier = "basico",
+    } = body || {};
+
+    const selectedTier = ["basico", "rapido", "avancado", "raciocinio"].includes(tier)
+      ? tier
+      : "basico";
 
     if (!prompt && !image) {
       return new Response(
@@ -42,17 +93,79 @@ serve(async (req) => {
       );
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
+    const requiresLogin = selectedTier === "avancado" || selectedTier === "raciocinio";
+
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const supabaseAdmin =
+      SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
+        ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+        : null;
+
+    // SEGURANÇA: nunca confiamos no userId que o app manda no corpo da requisição
+    // (qualquer um poderia forjar isso pelo console do navegador). A identidade real
+    // vem só do token de login (JWT), validado aqui no servidor.
+    let verifiedUserId: string | null = null;
+    const authHeader = req.headers.get("Authorization");
+    if (authHeader && supabaseAdmin) {
+      const jwt = authHeader.replace(/^Bearer\s+/i, "");
+      const { data: authData, error: authError } = await supabaseAdmin.auth.getUser(jwt);
+      if (!authError && authData?.user) {
+        verifiedUserId = authData.user.id;
+      }
+    }
+
+    if (requiresLogin && !verifiedUserId) {
       return new Response(
-        JSON.stringify({ error: "LOVABLE_API_KEY não configurada no backend." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({
+          error: "Faça login para usar este modo.",
+          requiresLogin: true,
+        }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    const limit = DAILY_LIMIT[selectedTier];
+    if (limit && verifiedUserId && supabaseAdmin) {
+      const today = new Date().toISOString().slice(0, 10);
+
+      const { data: existing } = await supabaseAdmin
+        .from("tier_usage")
+        .select("count")
+        .eq("user_id", verifiedUserId)
+        .eq("tier", selectedTier)
+        .eq("usage_date", today)
+        .maybeSingle();
+
+      const currentCount = existing?.count ?? 0;
+
+      if (currentCount >= limit) {
+        return new Response(
+          JSON.stringify({
+            error: UPGRADE_MESSAGE,
+            upgradeRequired: true,
+          }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      await supabaseAdmin
+        .from("tier_usage")
+        .upsert(
+          { user_id: verifiedUserId, tier: selectedTier, usage_date: today, count: currentCount + 1 },
+          { onConflict: "user_id,tier,usage_date" }
+        );
+    }
+
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY não configurada no Supabase Secrets");
+    }
+
+    const basePrompt = `${SYSTEM_PROMPT}${TIER_SUFFIX[selectedTier]}`;
     const systemContent = context && typeof context === "string" && context.trim()
-      ? `${SYSTEM_PROMPT}\n\n## CONTEXTO DO USUÁRIO\n${context.trim()}`
-      : SYSTEM_PROMPT;
+      ? `${basePrompt}\n\n## CONTEXTO DO USUÁRIO\n${context.trim()}`
+      : basePrompt;
 
     const messages: any[] = [{ role: "system", content: systemContent }];
 
@@ -69,29 +182,38 @@ serve(async (req) => {
         role: "user",
         content: [
           { type: "text", text: prompt || "Analise esta imagem e descreva o que vê." },
-          { type: "image_url", image_url: { url: image } },
+          { type: "image_url", image_url: { url: image, detail: "high" } },
         ],
       });
     } else {
       messages.push({ role: "user", content: prompt });
     }
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const requestBody: Record<string, unknown> = {
+      model: MODEL_BY_TIER[selectedTier],
+      messages,
+      stream,
+      temperature: 0.7,
+      top_p: 0.95,
+      max_tokens: MAX_TOKENS_BY_TIER[selectedTier],
+    };
+
+    if (selectedTier === "raciocinio") {
+      requestBody.reasoning_effort = "high";
+    }
+
+    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${GEMINI_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages,
-        stream,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("Lovable AI error:", response.status, errorText);
+      console.error("Gemini API error:", response.status, errorText);
 
       if (response.status === 429) {
         return new Response(
@@ -101,17 +223,13 @@ serve(async (req) => {
       }
       if (response.status === 402) {
         return new Response(
-          JSON.stringify({ error: "Créditos de IA esgotados. Adicione créditos no painel Lovable Cloud." }),
+          JSON.stringify({ error: "Cota da API Gemini excedida. Verifique seu plano em aistudio.google.com." }),
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      return new Response(
-        JSON.stringify({ error: `Erro na IA: ${response.status} ${errorText.slice(0, 300)}` }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      throw new Error(`Erro na API Gemini: ${response.status}`);
     }
 
-    // Streaming SSE
     if (stream && response.body) {
       return new Response(response.body, {
         headers: {
@@ -123,7 +241,6 @@ serve(async (req) => {
       });
     }
 
-    // Resposta não-streaming
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content || "Desculpe, não consegui processar sua solicitação.";
     const hasCode = /```[\w]*\n[\s\S]*?```/.test(content);
@@ -142,7 +259,7 @@ serve(async (req) => {
     console.error("Kojak Code error:", error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Erro desconhecido no processamento" }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });

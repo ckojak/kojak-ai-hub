@@ -44,9 +44,9 @@ const TIER_SUFFIX: Record<string, string> = {
 };
 
 const MODEL_BY_TIER: Record<string, string> = {
-  basico: "gemini-2.5-flash-lite",
-  rapido: "gemini-2.5-flash",
-  avancado: "gemini-2.5-pro",
+  basico: "gemini-3.1-flash-lite",
+  rapido: "gemini-3.5-flash",
+  avancado: "gemini-3.5-flash",
   raciocinio: "gemini-3.1-pro",
 };
 

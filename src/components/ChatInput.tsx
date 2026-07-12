@@ -202,7 +202,7 @@ export function ChatInput({
           </button>
 
           {tierMenuOpen && (
-            <div className="absolute left-4 right-4 top-full mt-1 z-20 bg-background border border-border rounded-xl shadow-lg overflow-hidden animate-fade-in">
+            <div className="absolute left-4 right-4 bottom-full mb-1 z-20 bg-background border border-border rounded-xl shadow-lg overflow-hidden animate-fade-in">
               {TIER_OPTIONS.map((option) => {
                 const isActive = aiTier === option.id;
                 const isBlocked = option.locked && !isLoggedIn;

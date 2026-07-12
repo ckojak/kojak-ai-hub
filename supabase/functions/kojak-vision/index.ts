@@ -23,12 +23,9 @@ serve(async (req) => {
       );
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      return new Response(
-        JSON.stringify({ error: "LOVABLE_API_KEY não configurada no backend." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY não está configurada");
     }
 
     let messageContent: any;
@@ -64,20 +61,22 @@ serve(async (req) => {
       }
     }
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${GEMINI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image",
+        model: "gemini-2.5-flash-image",
         messages: [{ role: "user", content: messageContent }],
         modalities: ["image", "text"],
       }),
     });
 
     if (!response.ok) {
+      const errText = await response.text().catch(() => "");
+      console.error("Gemini Vision error:", response.status, errText);
       if (response.status === 429) {
         return new Response(
           JSON.stringify({ error: "Limite de requisições. Tente novamente em alguns instantes." }),
@@ -86,21 +85,17 @@ serve(async (req) => {
       }
       if (response.status === 402) {
         return new Response(
-          JSON.stringify({ error: "Créditos de IA esgotados. Adicione créditos no Lovable Cloud." }),
+          JSON.stringify({ error: "Cota da API Gemini excedida. Verifique seu plano em aistudio.google.com." }),
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      const errText = await response.text().catch(() => "");
-      return new Response(
-        JSON.stringify({ error: `Erro ao processar imagem: ${response.status} ${errText.slice(0, 300)}` }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      throw new Error(`Erro na API Gemini: ${response.status}`);
     }
 
     const data = await response.json();
     const msg = data.choices?.[0]?.message || {};
     const textContent = msg.content || "Imagem gerada.";
-    // Lovable image models retornam a imagem em message.images[0].image_url.url (base64 data URL)
+    // A Gemini devolve a imagem em message.images[0].image_url.url (base64 data URL)
     const imageUrl = msg.images?.[0]?.image_url?.url || null;
 
     return new Response(
@@ -118,7 +113,7 @@ serve(async (req) => {
     console.error("Kojak Vision error:", error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Erro no processamento de visão" }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });

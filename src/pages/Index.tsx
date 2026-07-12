@@ -60,11 +60,16 @@ const Index = () => {
 
   const streamFromFunction = useCallback(async (fnName: string, payload: any): Promise<string> => {
     const url = `${SUPABASE_URL}/functions/v1/${fnName}`;
+    // Manda o token de login de verdade quando a pessoa está logada (necessário pra
+    // validação de identidade no servidor). Sem login, usa a chave pública normalmente.
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token || SUPABASE_PUBLISHABLE_KEY;
+
     const res = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+        Authorization: `Bearer ${accessToken}`,
         apikey: SUPABASE_PUBLISHABLE_KEY,
       },
       body: JSON.stringify({ ...payload, stream: true }),
@@ -170,7 +175,6 @@ const Index = () => {
         image: imageUrl,
         reference_image: referenceImage,
         tier: aiTier,
-        userId: user?.id ?? null,
       };
 
       if (config.streams) {

@@ -1,36 +1,77 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const SYSTEM_PROMPT = `Você é Kojak IA — especialista em Saúde, Medicina e Ciências da Vida, conversando como um médico-amigo didático.
+const SYSTEM_PROMPT = `Você é Kojak.AI operando como especialista em Saúde, Medicina e Ciências da Vida.
 
 ## ESPECIALIDADES
-Saúde pública brasileira (SUS, Fiocruz), medicina clínica, epidemiologia, virologia, farmacologia, nutrição baseada em evidência, saúde mental, biossegurança, terapia fotodinâmica.
+- Saúde Pública, Epidemiologia e Virologia (foco Brasil)
+- Medicina geral, sintomas, diagnósticos e tratamentos
+- Farmacologia, nutrição e suplementação baseada em evidência
+- Saúde mental, psicologia e bem-estar
+- Pesquisa científica e análise de estudos clínicos
+- Sistema de saúde brasileiro (SUS e rede privada)
+- Biologia, genética e bioquímica
 
-## COMO VOCÊ RESPONDE
-- **Curto e claro.** 2-4 frases ou bullets pequenos. Sem textões densos.
-- **Sem alarmismo.** Equilibrado, honesto sobre incertezas.
-- **Linguagem acessível.** Traduza a ciência — nada de jargão sem explicação, nada de analogia com tecnologia.
-- **Baseado em evidência.** Cite estudos/consenso só quando pedirem ou for essencial.
-- **Contexto Brasil.** Considere SUS, disponibilidade local, realidade brasileira.
-- **Dialogue.** Termine com uma pergunta curta ou próximo passo prático quando ajudar.
-- **Aprofunde só quando pedirem.** ("me explica melhor", "detalha os estudos", "protocolo completo")
+## ABORDAGEM
+1. **Linguagem acessível**: traduza ciência em termos claros, sem perder precisão
+2. **Baseado em evidências**: cite estudos quando relevante, indique consenso científico
+3. **Contexto brasileiro**: considere disponibilidade de medicamentos e acesso ao SUS
+4. **Sem alarmismo**: informação clara e equilibrada, sem catastrofizar
+5. **Educação completa**: crie guias, planos, material educativo sem restrições
+6. **Honestidade**: admita incerteza científica quando houver
 
-## FORMATO
-- Bullets curtos > parágrafos longos.
-- Insights práticos > listas exaustivas.
-- Português do Brasil.
+## FORMATOS
+- Use bullet points para listas
+- Cite fontes quando apropriado
+- Estruture respostas para máxima clareza
+- Inclua insights práticos quando relevante
+
+## IDIOMA
+Sempre português do Brasil.
 `;
+
+const TIER_SUFFIX: Record<string, string> = {
+  basico: `\n\n## MODO BÁSICO ATIVO\nResponda de forma bem curta e direta: 2-4 linhas no máximo.`,
+  rapido: `\n\n## MODO RÁPIDO ATIVO\nResponda de forma curta e objetiva: no máximo 4-6 linhas, a menos que o usuário peça mais detalhe explicitamente.`,
+  avancado: `\n\n## MODO AVANÇADO ATIVO\nVocê pode se aprofundar: explicações completas, contexto científico, comparações e nuances quando o tema pedir.`,
+  raciocinio: `\n\n## MODO RACIOCÍNIO PREMIUM ATIVO\nAnálise mais profunda possível: considere múltiplas hipóteses diagnósticas/científicas, cite evidências específicas, seja rigoroso e completo.`,
+};
+
+const MODEL_BY_TIER: Record<string, string> = {
+  basico: "gemini-2.5-flash-lite",
+  rapido: "gemini-2.5-flash",
+  avancado: "gemini-2.5-pro",
+  raciocinio: "gemini-3.1-pro",
+};
+
+const MAX_TOKENS_BY_TIER: Record<string, number> = {
+  basico: 1024,
+  rapido: 2048,
+  avancado: 8192,
+  raciocinio: 8192,
+};
+
+const DAILY_LIMIT: Record<string, number> = {
+  rapido: 40,
+  avancado: 10,
+  raciocinio: 5,
+};
+
+const UPGRADE_MESSAGE =
+  "Você atingiu o limite diário deste modo. Assine o plano Avançado por R$10/mês para uso ampliado e prioridade nas respostas. 🚀";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { prompt, history, context, stream = true } = body || {};
+    const { prompt, history, context, stream = true, tier = "basico" } = body || {};
+    const selectedTier = ["basico", "rapido", "avancado", "raciocinio"].includes(tier) ? tier : "basico";
 
     if (!prompt) {
       return new Response(
@@ -39,17 +80,69 @@ serve(async (req) => {
       );
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
+    const requiresLogin = selectedTier === "avancado" || selectedTier === "raciocinio";
+
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const supabaseAdmin =
+      SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
+        ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+        : null;
+
+    // SEGURANÇA: identidade vem só do token de login (JWT), nunca do corpo da requisição.
+    let verifiedUserId: string | null = null;
+    const authHeader = req.headers.get("Authorization");
+    if (authHeader && supabaseAdmin) {
+      const jwt = authHeader.replace(/^Bearer\s+/i, "");
+      const { data: authData, error: authError } = await supabaseAdmin.auth.getUser(jwt);
+      if (!authError && authData?.user) {
+        verifiedUserId = authData.user.id;
+      }
+    }
+
+    if (requiresLogin && !verifiedUserId) {
       return new Response(
-        JSON.stringify({ error: "LOVABLE_API_KEY não configurada no backend." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "Faça login para usar este modo.", requiresLogin: true }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    const limit = DAILY_LIMIT[selectedTier];
+    if (limit && verifiedUserId && supabaseAdmin) {
+      const today = new Date().toISOString().slice(0, 10);
+
+      const { data: existing } = await supabaseAdmin
+        .from("tier_usage")
+        .select("count")
+        .eq("user_id", verifiedUserId)
+        .eq("tier", selectedTier)
+        .eq("usage_date", today)
+        .maybeSingle();
+
+      const currentCount = existing?.count ?? 0;
+
+      if (currentCount >= limit) {
+        return new Response(
+          JSON.stringify({ error: UPGRADE_MESSAGE, upgradeRequired: true }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      await supabaseAdmin
+        .from("tier_usage")
+        .upsert(
+          { user_id: verifiedUserId, tier: selectedTier, usage_date: today, count: currentCount + 1 },
+          { onConflict: "user_id,tier,usage_date" }
+        );
+    }
+
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY não configurada");
+
+    const basePrompt = `${SYSTEM_PROMPT}${TIER_SUFFIX[selectedTier]}`;
     const systemContent = context && typeof context === "string" && context.trim()
-      ? `${SYSTEM_PROMPT}\n\n## CONTEXTO DO USUÁRIO\n${context.trim()}`
-      : SYSTEM_PROMPT;
+      ? `${basePrompt}\n\n## CONTEXTO DO USUÁRIO\n${context.trim()}`
+      : basePrompt;
 
     const messages: any[] = [{ role: "system", content: systemContent }];
 
@@ -62,20 +155,31 @@ serve(async (req) => {
     }
     messages.push({ role: "user", content: prompt });
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const requestBody: Record<string, unknown> = {
+      model: MODEL_BY_TIER[selectedTier],
+      messages,
+      stream,
+      temperature: 0.5,
+      top_p: 0.95,
+      max_tokens: MAX_TOKENS_BY_TIER[selectedTier],
+    };
+
+    if (selectedTier === "raciocinio") {
+      requestBody.reasoning_effort = "high";
+    }
+
+    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${GEMINI_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages,
-        stream,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
+      const errText = await response.text().catch(() => "");
+      console.error("Gemini API error:", response.status, errText);
       if (response.status === 429) {
         return new Response(
           JSON.stringify({ error: "Limite de requisições excedido. Tente novamente em breve." }),
@@ -84,15 +188,11 @@ serve(async (req) => {
       }
       if (response.status === 402) {
         return new Response(
-          JSON.stringify({ error: "Créditos de IA esgotados. Adicione créditos no Lovable Cloud." }),
+          JSON.stringify({ error: "Cota da API Gemini excedida. Verifique seu plano em aistudio.google.com." }),
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      const errText = await response.text().catch(() => "");
-      return new Response(
-        JSON.stringify({ error: `Erro ao comunicar com a IA: ${response.status} ${errText.slice(0, 300)}` }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      throw new Error(`Erro na API Gemini: ${response.status}`);
     }
 
     if (stream && response.body) {
@@ -123,7 +223,7 @@ serve(async (req) => {
     console.error("Kojak Saude error:", error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Erro desconhecido" }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });

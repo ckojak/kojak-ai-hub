@@ -128,6 +128,13 @@ const Index = () => {
   const handleSendMessage = useCallback(async (content: string, mode: string, imageUrl?: string) => {
     if (!content.trim() && !imageUrl && !referenceImage) return;
 
+    // Marca "carregando" JÁ, antes de qualquer coisa assíncrona (criar chat, salvar
+    // mensagem no banco). Isso evita a tela de sugestões "piscar" de volta durante
+    // a brecha entre criar o chat (que troca pra uma conversa momentaneamente vazia)
+    // e a mensagem realmente aparecer.
+    setIsLoading(true);
+    setStreamingContent("");
+
     let chatId = currentChat?.id;
 
     if (user) {
@@ -135,6 +142,7 @@ const Index = () => {
         const newChat = await createChat(mode);
         if (!newChat) {
           toast({ title: "Erro", description: "Não foi possível criar a conversa", variant: "destructive" });
+          setIsLoading(false);
           return;
         }
         chatId = newChat.id;
@@ -159,9 +167,6 @@ const Index = () => {
       };
       setLocalMessages(prev => [...prev, userMessage]);
     }
-
-    setIsLoading(true);
-    setStreamingContent("");
 
     try {
       const config = modeConfig[mode] || modeConfig.chat;

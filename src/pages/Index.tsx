@@ -180,6 +180,7 @@ const Index = () => {
         image: imageUrl,
         reference_image: referenceImage,
         tier: aiTier,
+        chatId, // NOVO enviado para edge funtions extrair memorias
       };
 
       if (config.streams) {

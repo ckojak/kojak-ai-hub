@@ -1,4 +1,3 @@
-// memoryService.ts — Memória permanente do Kojak.AI (Deno / Edge Function)
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")!;
@@ -7,9 +6,14 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-// ---------- 1. GERAR EMBEDDING (API REST direta) ----------
+type MemoryItem = {
+  content: string;
+  category: string;
+  importance: number;
+};
+
 export async function generateEmbedding(text: string): Promise<number[]> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${GEMINI_API_KEY}`;
+  const url = "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=" + GEMINI_API_KEY;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -18,12 +22,11 @@ export async function generateEmbedding(text: string): Promise<number[]> {
       content: { parts: [{ text }], role: "user" },
     }),
   });
-  if (!res.ok) throw new Error(`Embedding failed: ${res.status}`);
+  if (!res.ok) throw new Error("Embedding failed: " + res.status);
   const data = await res.json();
   return data.embedding?.values ?? [];
 }
 
-// ---------- 2. EXTRAIR MEMÓRIAS DA CONVERSA ----------
 export async function extractMemories(
   messages: { role: string; content: string }[],
   userId: string,
@@ -38,33 +41,13 @@ export async function extractMemories(
 
   const conversationText = messages
     .slice(-15)
-    .map((m) => `${m.role === "user" ? "USUÁRIO" : "KOJAK"}: ${m.content}`)
+    .map((m) => (m.role === "user" ? "USUÁRIO" : "KOJAK") + ": " + m.content)
     .join("\n\n");
 
-  const extractionPrompt = `Analise a conversa abaixo e extraia INFORMAÇÕES DURÁVEIS sobre o usuário que valeria a pena lembrar em conversas futuras.
-
-Regras:
-- Só extraia coisas PERMANENTES (preferências, fatos pessoais, decisões, contexto recorrente)
-- NÃO extraia perguntas pontuais ou tópicos da conversa atual
-- Seja específico (ex: "Usuário trabalha com engenharia fotovoltaica" em vez de "Usuário trabalha")
-- Se não houver nada digno de memorizar, retorne um array vazio []
-
-Formato de saída (JSON válido, sem markdown):
-[
-  {
-    "content": "texto da memória",
-    "category": "preference|fact|decision|personal|general",
-    "importance": 1-10
-  }
-]
-
-CONVERSA:
-${conversationText}
-
-Responda apenas com o JSON:`;
+  const extractionPrompt = "Analise a conversa abaixo e extraia INFORMAÇÕES DURÁVEIS sobre o usuário que valeria a pena lembrar em conversas futuras.\n\nRegras:\n- Só extraia coisas PERMANENTES (preferências, fatos pessoais, decisões, contexto recorrente)\n- NÃO extraia perguntas pontuais ou tópicos da conversa atual\n- Seja específico\n- Se não houver nada digno de memorizar, retorne um array vazio []\n\nFormato de saída (JSON válido, sem markdown):\n[{\"content\":\"texto da memória\",\"category\":\"preference|fact|decision|personal|general\",\"importance\":1-10}]\n\nCONVERSA:\n" + conversationText + "\n\nResponda apenas com o JSON:";
 
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + GEMINI_API_KEY,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -87,7 +70,7 @@ Responda apenas com o JSON:`;
     .replace(/```\s*$/i, "")
     .trim();
 
-  let memories: Array<{ content: string; category: string; importance: number }> = [];
+  let memories: MemoryItem[] = [];
   try {
     memories = JSON.parse(cleanJson);
   } catch (e) {
@@ -122,11 +105,10 @@ Responda apenas com o JSON:`;
   }
 
   await logProcessing(chatId, memories.length);
-  console.log(`[memory] ${memories.length} memórias extraídas para ${userId}`);
+  console.log("[memory] " + memories.length + " memórias extraídas para " + userId);
   return memories.length;
 }
 
-// ---------- 3. RECUPERAR MEMÓRIAS RELEVANTES ----------
 export async function retrieveRelevantMemories(
   userMessage: string,
   userId: string,
@@ -138,20 +120,19 @@ export async function retrieveRelevantMemories(
       query_embedding: queryEmbedding,
       match_user_id: userId,
       match_count: limit,
-      match_threshold: 0.5,
+      match_threshold: 0.3,
     });
     if (error || !memories || memories.length === 0) return "";
     const formatted = memories
-      .map((m: any) => `[${m.category.toUpperCase()}|imp:${m.importance}] ${m.content}`)
+      .map((m: any) => "[" + m.category.toUpperCase() + "|imp:" + m.importance + "] " + m.content)
       .join("\n");
-    return `\n\n## MEMÓRIAS RELEVANTES SOBRE O USUÁRIO\n${formatted}\n(Use para personalizar a resposta. Não cite que está lembrando.)\n`;
+    return "\n\n## MEMÓRIAS RELEVANTES SOBRE O USUÁRIO\n" + formatted + "\n(Use para personalizar a resposta. Não cite que está lembrando.)\n";
   } catch (e) {
     console.error("[memory] retrieve error:", e);
     return "";
   }
 }
 
-// ---------- 4. LOG DE PROCESSAMENTO ----------
 async function logProcessing(chatId: string, count: number): Promise<void> {
   await supabase.from("memory_processing_log").insert({
     chat_id: chatId,

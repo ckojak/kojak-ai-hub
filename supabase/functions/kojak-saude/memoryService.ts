@@ -6,8 +6,14 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+type MemoryItem = {
+  content: string;
+  category: string;
+  importance: number;
+};
+
 export async function generateEmbedding(text: string): Promise<number[]> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${GEMINI_API_KEY}`;
+  const url = "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=" + GEMINI_API_KEY;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -38,7 +44,7 @@ export async function extractMemories(
     .map((m) => (m.role === "user" ? "USUÁRIO" : "KOJAK") + ": " + m.content)
     .join("\n\n");
 
-  const extractionPrompt = "Analise a conversa abaixo e extraia INFORMAÇÕES DURÁVEIS sobre o usuário que valeria a pena lembrar em conversas futuras.\n\nRegras:\n- Só extraia coisas PERMANENTES (preferências, fatos pessoais, decisões, contexto recorrente)\n- NÃO extraia perguntas pontuais ou tópicos da conversa atual\n- Seja específico (ex: 'Usuário trabalha com engenharia fotovoltaica' em vez de 'Usuário trabalha')\n- Se não houver nada digno de memorizar, retorne um array vazio []\n\nFormato de saída (JSON válido, sem markdown):\n[{\"content\":\"texto da memória\",\"category\":\"preference|fact|decision|personal|general\",\"importance\":1-10}]\n\nCONVERSA:\n" + conversationText + "\n\nResponda apenas com o JSON:";
+  const extractionPrompt = "Analise a conversa abaixo e extraia INFORMAÇÕES DURÁVEIS sobre o usuário que valeria a pena lembrar em conversas futuras.\n\nRegras:\n- Só extraia coisas PERMANENTES (preferências, fatos pessoais, decisões, contexto recorrente)\n- NÃO extraia perguntas pontuais ou tópicos da conversa atual\n- Seja específico\n- Se não houver nada digno de memorizar, retorne um array vazio []\n\nFormato de saída (JSON válido, sem markdown):\n[{\"content\":\"texto da memória\",\"category\":\"preference|fact|decision|personal|general\",\"importance\":1-10}]\n\nCONVERSA:\n" + conversationText + "\n\nResponda apenas com o JSON:";
 
   const res = await fetch(
     "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + GEMINI_API_KEY,
@@ -64,7 +70,7 @@ export async function extractMemories(
     .replace(/```\s*$/i, "")
     .trim();
 
-  let memories: Array<{ content: string; category: string; importance: number }> = [];
+  let memories: MemoryItem[] = [];
   try {
     memories = JSON.parse(cleanJson);
   } catch (e) {

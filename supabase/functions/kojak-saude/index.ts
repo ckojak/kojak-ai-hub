@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { retrieveRelevantMemories, extractMemories } from "./memoryService.ts"; // NOVO
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -70,7 +71,7 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { prompt, history, context, stream = true, tier = "basico" } = body || {};
+    const { prompt, history, context, stream = true, tier = "basico", chatId } = body || {}; // NOVO: chatId
     const selectedTier = ["basico", "rapido", "avancado", "raciocinio"].includes(tier) ? tier : "basico";
 
     if (!prompt) {
@@ -89,7 +90,6 @@ serve(async (req) => {
         ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
         : null;
 
-    // SEGURANÇA: identidade vem só do token de login (JWT), nunca do corpo da requisição.
     let verifiedUserId: string | null = null;
     const authHeader = req.headers.get("Authorization");
     if (authHeader && supabaseAdmin) {
@@ -110,7 +110,6 @@ serve(async (req) => {
     const limit = DAILY_LIMIT[selectedTier];
     if (limit && verifiedUserId && supabaseAdmin) {
       const today = new Date().toISOString().slice(0, 10);
-
       const { data: existing } = await supabaseAdmin
         .from("tier_usage")
         .select("count")
@@ -118,16 +117,13 @@ serve(async (req) => {
         .eq("tier", selectedTier)
         .eq("usage_date", today)
         .maybeSingle();
-
       const currentCount = existing?.count ?? 0;
-
       if (currentCount >= limit) {
         return new Response(
           JSON.stringify({ error: UPGRADE_MESSAGE, upgradeRequired: true }),
           { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-
       await supabaseAdmin
         .from("tier_usage")
         .upsert(
@@ -140,9 +136,20 @@ serve(async (req) => {
     if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY não configurada");
 
     const basePrompt = `${SYSTEM_PROMPT}${TIER_SUFFIX[selectedTier]}`;
-    const systemContent = context && typeof context === "string" && context.trim()
-      ? `${basePrompt}\n\n## CONTEXTO DO USUÁRIO\n${context.trim()}`
-      : basePrompt;
+    let systemContent = basePrompt;
+
+    // NOVO: injeta contexto do usuário
+    if (context && typeof context === "string" && context.trim()) {
+      systemContent += `\n\n## CONTEXTO DO USUÁRIO\n${context.trim()}`;
+    }
+
+    // NOVO: recupera memórias relevantes do usuário logado
+    if (verifiedUserId && prompt) {
+      const memoryContext = await retrieveRelevantMemories(prompt, verifiedUserId, 5);
+      if (memoryContext) {
+        systemContent += memoryContext;
+      }
+    }
 
     const messages: any[] = [{ role: "system", content: systemContent }];
 
@@ -193,6 +200,17 @@ serve(async (req) => {
         );
       }
       throw new Error(`Erro na API Gemini: ${response.status}`);
+    }
+
+    // NOVO: extrai memórias em background (não bloqueia a resposta)
+    if (verifiedUserId && chatId && history && history.length > 0) {
+      const allMessages = [
+        ...history.slice(-15),
+        { role: "user", content: prompt || "" },
+      ];
+      extractMemories(allMessages, verifiedUserId, chatId).catch((e) =>
+        console.error("[memory] background extract error:", e)
+      );
     }
 
     if (stream && response.body) {

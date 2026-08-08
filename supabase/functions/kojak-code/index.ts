@@ -1,9 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import {
+  corsHeaders,
+  GEMINI_BASE,
+  geminiErrorResponse,
+  geminiStreamToOpenAISSE,
+  missingKeyResponse,
+  toGeminiContents,
+} from "../_shared/gemini.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const MODEL = "gemini-2.5-flash";
 
 const SYSTEM_PROMPT = `Você é Kojak IA — um parceiro de conversa inteligente, didático e humano.
 
@@ -24,6 +29,9 @@ Português do Brasil, exceto se o usuário mudar.
 
 ## MEMÓRIA
 Use o histórico da conversa para não repetir explicações já dadas.
+
+## LIMITE RÍGIDO
+Nunca crie, estruture ou desenvolva cursos, módulos de ensino ou currículos. Recuse educadamente e ofereça outra forma de ajudar.
 `;
 
 serve(async (req) => {
@@ -38,23 +46,18 @@ serve(async (req) => {
     if (!prompt && !image) {
       return new Response(
         JSON.stringify({ error: "Prompt é obrigatório" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      return new Response(
-        JSON.stringify({ error: "LOVABLE_API_KEY não configurada no backend." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) return missingKeyResponse();
 
     const systemContent = context && typeof context === "string" && context.trim()
       ? `${SYSTEM_PROMPT}\n\n## CONTEXTO DO USUÁRIO\n${context.trim()}`
       : SYSTEM_PROMPT;
 
-    const messages: any[] = [{ role: "system", content: systemContent }];
+    const messages: any[] = [];
 
     if (Array.isArray(history)) {
       for (const m of history.slice(-15)) {
@@ -76,44 +79,28 @@ serve(async (req) => {
       messages.push({ role: "user", content: prompt });
     }
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const payload = {
+      systemInstruction: { parts: [{ text: systemContent }] },
+      contents: toGeminiContents(messages),
+    };
+
+    const endpoint = stream
+      ? `${GEMINI_BASE}/${MODEL}:streamGenerateContent?alt=sse`
+      : `${GEMINI_BASE}/${MODEL}:generateContent`;
+
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "x-goog-api-key": GEMINI_API_KEY,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages,
-        stream,
-      }),
+      body: JSON.stringify(payload),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Lovable AI error:", response.status, errorText);
+    if (!response.ok) return await geminiErrorResponse(response, "Gemini error:");
 
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Limite de requisições excedido. Aguarde um momento e tente novamente." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Créditos de IA esgotados. Adicione créditos no painel Lovable Cloud." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      return new Response(
-        JSON.stringify({ error: `Erro na IA: ${response.status} ${errorText.slice(0, 300)}` }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Streaming SSE
     if (stream && response.body) {
-      return new Response(response.body, {
+      return new Response(geminiStreamToOpenAISSE(response.body), {
         headers: {
           ...corsHeaders,
           "Content-Type": "text/event-stream",
@@ -123,9 +110,10 @@ serve(async (req) => {
       });
     }
 
-    // Resposta não-streaming
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || "Desculpe, não consegui processar sua solicitação.";
+    const content = (data?.candidates?.[0]?.content?.parts ?? [])
+      .map((p: any) => p?.text ?? "")
+      .join("") || "Desculpe, não consegui processar sua solicitação.";
     const hasCode = /```[\w]*\n[\s\S]*?```/.test(content);
 
     return new Response(
@@ -136,13 +124,13 @@ serve(async (req) => {
         type: hasCode ? "code" : "text",
         timestamp: new Date().toISOString(),
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
     console.error("Kojak Code error:", error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Erro desconhecido no processamento" }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });

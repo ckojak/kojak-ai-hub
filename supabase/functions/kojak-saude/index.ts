@@ -1,9 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import {
+  corsHeaders,
+  GEMINI_BASE,
+  geminiErrorResponse,
+  geminiStreamToOpenAISSE,
+  missingKeyResponse,
+  toGeminiContents,
+} from "../_shared/gemini.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const MODEL = "gemini-2.5-flash";
 
 const SYSTEM_PROMPT = `Você é Kojak IA — especialista em Saúde, Medicina e Ciências da Vida, conversando como um médico-amigo didático.
 
@@ -23,6 +28,9 @@ Saúde pública brasileira (SUS, Fiocruz), medicina clínica, epidemiologia, vir
 - Bullets curtos > parágrafos longos.
 - Insights práticos > listas exaustivas.
 - Português do Brasil.
+
+## LIMITE RÍGIDO
+Nunca crie, estruture ou desenvolva cursos, módulos de ensino ou currículos. Recuse educadamente.
 `;
 
 serve(async (req) => {
@@ -35,24 +43,18 @@ serve(async (req) => {
     if (!prompt) {
       return new Response(
         JSON.stringify({ error: "Prompt é obrigatório" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      return new Response(
-        JSON.stringify({ error: "LOVABLE_API_KEY não configurada no backend." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) return missingKeyResponse();
 
     const systemContent = context && typeof context === "string" && context.trim()
       ? `${SYSTEM_PROMPT}\n\n## CONTEXTO DO USUÁRIO\n${context.trim()}`
       : SYSTEM_PROMPT;
 
-    const messages: any[] = [{ role: "system", content: systemContent }];
-
+    const messages: any[] = [];
     if (Array.isArray(history)) {
       for (const m of history.slice(-15)) {
         if (m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string") {
@@ -62,41 +64,26 @@ serve(async (req) => {
     }
     messages.push({ role: "user", content: prompt });
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const endpoint = stream
+      ? `${GEMINI_BASE}/${MODEL}:streamGenerateContent?alt=sse`
+      : `${GEMINI_BASE}/${MODEL}:generateContent`;
+
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "x-goog-api-key": GEMINI_API_KEY,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages,
-        stream,
+        systemInstruction: { parts: [{ text: systemContent }] },
+        contents: toGeminiContents(messages),
       }),
     });
 
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Limite de requisições excedido. Tente novamente em breve." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Créditos de IA esgotados. Adicione créditos no Lovable Cloud." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      const errText = await response.text().catch(() => "");
-      return new Response(
-        JSON.stringify({ error: `Erro ao comunicar com a IA: ${response.status} ${errText.slice(0, 300)}` }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    if (!response.ok) return await geminiErrorResponse(response, "Gemini saude error:");
 
     if (stream && response.body) {
-      return new Response(response.body, {
+      return new Response(geminiStreamToOpenAISSE(response.body), {
         headers: {
           ...corsHeaders,
           "Content-Type": "text/event-stream",
@@ -107,7 +94,9 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || "Desculpe, não consegui gerar uma resposta.";
+    const content = (data?.candidates?.[0]?.content?.parts ?? [])
+      .map((p: any) => p?.text ?? "")
+      .join("") || "Desculpe, não consegui gerar uma resposta.";
 
     return new Response(
       JSON.stringify({
@@ -117,13 +106,13 @@ serve(async (req) => {
         type: "text",
         timestamp: new Date().toISOString(),
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
     console.error("Kojak Saude error:", error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Erro desconhecido" }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });

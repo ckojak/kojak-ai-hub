@@ -1,16 +1,20 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import {
+  corsHeaders,
+  GEMINI_BASE,
+  geminiErrorResponse,
+  missingKeyResponse,
+  urlToInlineData,
+} from "../_shared/gemini.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const MODEL = "gemini-2.5-flash-image";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { prompt, image, reference_image, context } = body || {};
+    const { prompt, image, reference_image } = body || {};
 
     const safePrompt = typeof prompt === "string" ? prompt.trim() : "";
     const hasImage = typeof image === "string" && image.length > 100;
@@ -19,106 +23,91 @@ serve(async (req) => {
     if (!safePrompt && !hasImage && !hasReference) {
       return new Response(
         JSON.stringify({ error: "Forneça um prompt ou ao menos uma imagem." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      return new Response(
-        JSON.stringify({ error: "LOVABLE_API_KEY não configurada no backend." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) return missingKeyResponse();
 
-    let messageContent: any;
+    const parts: any[] = [];
 
     if (!hasImage && !hasReference) {
-      messageContent = `Crie uma imagem profissional, de alta qualidade e realista: ${safePrompt}. Ultra high resolution, photorealistic, professional quality.`;
+      parts.push({
+        text: `Crie uma imagem profissional, de alta qualidade e realista: ${safePrompt}. Ultra high resolution, photorealistic, professional quality.`,
+      });
+    } else if (hasReference && hasImage) {
+      const target = await urlToInlineData(reference_image);
+      const source = await urlToInlineData(image);
+      parts.push({ text: "IMAGEM ALVO (base da composição):" });
+      if (target) parts.push(target);
+      parts.push({ text: "IMAGEM FONTE (extrair e aplicar no alvo):" });
+      if (source) parts.push(source);
+      parts.push({
+        text: `Instrução: ${safePrompt || "Faça composição fotorrealista, integrando harmoniosamente o elemento principal da fonte na cena alvo."} Ultra high resolution, seamless integration, professional.`,
+      });
+    } else if (hasReference) {
+      const ref = await urlToInlineData(reference_image);
+      parts.push({ text: "Use como referência de estilo:" });
+      if (ref) parts.push(ref);
+      parts.push({
+        text: `Crie: ${safePrompt || "Recrie em alta qualidade"} mantendo o estilo e composição da referência. Ultra high resolution.`,
+      });
     } else {
-      messageContent = [];
-
-      if (hasReference && hasImage) {
-        messageContent.push({ type: "text", text: "IMAGEM ALVO (base da composição):" });
-        messageContent.push({ type: "image_url", image_url: { url: reference_image } });
-        messageContent.push({ type: "text", text: "IMAGEM FONTE (extrair e aplicar no alvo):" });
-        messageContent.push({ type: "image_url", image_url: { url: image } });
-        messageContent.push({
-          type: "text",
-          text: `Instrução: ${safePrompt || "Faça composição fotorrealista, integrando harmoniosamente o elemento principal da fonte na cena alvo."} Ultra high resolution, seamless integration, professional.`,
-        });
-      } else if (hasReference) {
-        messageContent.push({ type: "text", text: "Use como referência de estilo:" });
-        messageContent.push({ type: "image_url", image_url: { url: reference_image } });
-        messageContent.push({
-          type: "text",
-          text: `Crie: ${safePrompt || "Recrie em alta qualidade"} mantendo o estilo e composição da referência. Ultra high resolution.`,
-        });
-      } else if (hasImage) {
-        messageContent.push({ type: "text", text: "Edite/transforme:" });
-        messageContent.push({ type: "image_url", image_url: { url: image } });
-        messageContent.push({
-          type: "text",
-          text: `Instrução: ${safePrompt || "Melhore qualidade, detalhes e clareza."} Ultra high resolution, photorealistic.`,
-        });
-      }
+      const src = await urlToInlineData(image);
+      parts.push({ text: "Edite/transforme:" });
+      if (src) parts.push(src);
+      parts.push({
+        text: `Instrução: ${safePrompt || "Melhore qualidade, detalhes e clareza."} Ultra high resolution, photorealistic.`,
+      });
     }
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch(`${GEMINI_BASE}/${MODEL}:generateContent`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "x-goog-api-key": GEMINI_API_KEY,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image",
-        messages: [{ role: "user", content: messageContent }],
-        modalities: ["image", "text"],
+        contents: [{ role: "user", parts }],
+        generationConfig: { responseModalities: ["IMAGE", "TEXT"] },
       }),
     });
 
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Limite de requisições. Tente novamente em alguns instantes." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Créditos de IA esgotados. Adicione créditos no Lovable Cloud." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      const errText = await response.text().catch(() => "");
-      return new Response(
-        JSON.stringify({ error: `Erro ao processar imagem: ${response.status} ${errText.slice(0, 300)}` }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    if (!response.ok) return await geminiErrorResponse(response, "Gemini vision error:");
 
     const data = await response.json();
-    const msg = data.choices?.[0]?.message || {};
-    const textContent = msg.content || "Imagem gerada.";
-    // Lovable image models retornam a imagem em message.images[0].image_url.url (base64 data URL)
-    const imageUrl = msg.images?.[0]?.image_url?.url || null;
+    const resultParts = data?.candidates?.[0]?.content?.parts ?? [];
+
+    let imageUrl: string | null = null;
+    let textContent = "";
+    for (const part of resultParts) {
+      if (part?.inlineData?.data) {
+        const mime = part.inlineData.mimeType || "image/png";
+        imageUrl = `data:${mime};base64,${part.inlineData.data}`;
+      } else if (typeof part?.text === "string") {
+        textContent += part.text;
+      }
+    }
 
     return new Response(
       JSON.stringify({
         id: crypto.randomUUID(),
         role: "assistant",
-        content: imageUrl ? (safePrompt || "Aqui está a imagem gerada.") : textContent,
+        content: imageUrl
+          ? (safePrompt || "Aqui está a imagem gerada.")
+          : (textContent || "Não consegui gerar a imagem."),
         type: imageUrl ? "image" : "text",
         mediaUrl: imageUrl,
         timestamp: new Date().toISOString(),
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
     console.error("Kojak Vision error:", error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Erro no processamento de visão" }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });

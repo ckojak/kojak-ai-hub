@@ -1,16 +1,27 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import {
+  corsHeaders,
+  GEMINI_BASE,
+  geminiErrorResponse,
+  missingKeyResponse,
+  urlToInlineData,
+} from "../_shared/gemini.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+// Modelo leve por padrão (~3s). Qualidade máxima só sob demanda (quality: "high").
+const FAST_MODEL = "gemini-3.1-flash-lite-image";
+const HQ_MODEL = "gemini-3.1-flash-image";
+
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { prompt, image, reference_image, context } = body || {};
+    const { prompt, image, reference_image, quality, tier } = body || {};
+    const wantsHq = ["high", "alta", "raciocinio", "avancado"].includes(
+      String(quality || tier || "").toLowerCase(),
+    );
+    const MODEL = wantsHq ? HQ_MODEL : FAST_MODEL;
 
     const safePrompt = typeof prompt === "string" ? prompt.trim() : "";
     const hasImage = typeof image === "string" && image.length > 100;
@@ -19,48 +30,83 @@ serve(async (req) => {
     if (!safePrompt && !hasImage && !hasReference) {
       return new Response(
         JSON.stringify({ error: "Forneça um prompt ou ao menos uma imagem." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
     const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+<<<<< lovable-sync-1786317085
+    if (!GEMINI_API_KEY) return missingKeyResponse();
+=======
     if (!GEMINI_API_KEY) {
       throw new Error("GEMINI_API_KEY não está configurada");
     }
+    main
 
-    let messageContent: any;
+    const parts: any[] = [];
 
     if (!hasImage && !hasReference) {
-      messageContent = `Crie uma imagem profissional, de alta qualidade e realista: ${safePrompt}. Ultra high resolution, photorealistic, professional quality.`;
+      parts.push({
+        text: `Crie uma imagem profissional, de alta qualidade e realista: ${safePrompt}. Ultra high resolution, photorealistic, professional quality.`,
+      });
+    } else if (hasReference && hasImage) {
+      const target = await urlToInlineData(reference_image);
+      const source = await urlToInlineData(image);
+      parts.push({ text: "IMAGEM ALVO (base da composição):" });
+      if (target) parts.push(target);
+      parts.push({ text: "IMAGEM FONTE (extrair e aplicar no alvo):" });
+      if (source) parts.push(source);
+      parts.push({
+        text: `Instrução: ${safePrompt || "Faça composição fotorrealista, integrando harmoniosamente o elemento principal da fonte na cena alvo."} Ultra high resolution, seamless integration, professional.`,
+      });
+    } else if (hasReference) {
+      const ref = await urlToInlineData(reference_image);
+      parts.push({ text: "Use como referência de estilo:" });
+      if (ref) parts.push(ref);
+      parts.push({
+        text: `Crie: ${safePrompt || "Recrie em alta qualidade"} mantendo o estilo e composição da referência. Ultra high resolution.`,
+      });
     } else {
-      messageContent = [];
-
-      if (hasReference && hasImage) {
-        messageContent.push({ type: "text", text: "IMAGEM ALVO (base da composição):" });
-        messageContent.push({ type: "image_url", image_url: { url: reference_image } });
-        messageContent.push({ type: "text", text: "IMAGEM FONTE (extrair e aplicar no alvo):" });
-        messageContent.push({ type: "image_url", image_url: { url: image } });
-        messageContent.push({
-          type: "text",
-          text: `Instrução: ${safePrompt || "Faça composição fotorrealista, integrando harmoniosamente o elemento principal da fonte na cena alvo."} Ultra high resolution, seamless integration, professional.`,
-        });
-      } else if (hasReference) {
-        messageContent.push({ type: "text", text: "Use como referência de estilo:" });
-        messageContent.push({ type: "image_url", image_url: { url: reference_image } });
-        messageContent.push({
-          type: "text",
-          text: `Crie: ${safePrompt || "Recrie em alta qualidade"} mantendo o estilo e composição da referência. Ultra high resolution.`,
-        });
-      } else if (hasImage) {
-        messageContent.push({ type: "text", text: "Edite/transforme:" });
-        messageContent.push({ type: "image_url", image_url: { url: image } });
-        messageContent.push({
-          type: "text",
-          text: `Instrução: ${safePrompt || "Melhore qualidade, detalhes e clareza."} Ultra high resolution, photorealistic.`,
-        });
-      }
+      const src = await urlToInlineData(image);
+      parts.push({ text: "Edite/transforme:" });
+      if (src) parts.push(src);
+      parts.push({
+        text: `Instrução: ${safePrompt || "Melhore qualidade, detalhes e clareza."} Ultra high resolution, photorealistic.`,
+      });
     }
 
+<<< lovable-sync-1786317085
+    const response = await fetch(`${GEMINI_BASE}/${MODEL}:generateContent`, {
+      method: "POST",
+      headers: {
+        "x-goog-api-key": GEMINI_API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts }],
+        generationConfig: {
+          responseModalities: ["IMAGE", "TEXT"],
+          imageConfig: { imageSize: wantsHq ? "2K" : "1K" },
+        },
+      }),
+    });
+
+    if (!response.ok) return await geminiErrorResponse(response, "Gemini vision error:");
+
+    const data = await response.json();
+    const resultParts = data?.candidates?.[0]?.content?.parts ?? [];
+
+    let imageUrl: string | null = null;
+    let textContent = "";
+    for (const part of resultParts) {
+      if (part?.inlineData?.data) {
+        const mime = part.inlineData.mimeType || "image/png";
+        imageUrl = `data:${mime};base64,${part.inlineData.data}`;
+      } else if (typeof part?.text === "string") {
+        textContent += part.text;
+      }
+    }
+=======
     const response = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
       method: "POST",
       headers: {
@@ -97,23 +143,30 @@ serve(async (req) => {
     const textContent = msg.content || "Imagem gerada.";
     // A Gemini devolve a imagem em message.images[0].image_url.url (base64 data URL)
     const imageUrl = msg.images?.[0]?.image_url?.url || null;
+    main
 
     return new Response(
       JSON.stringify({
         id: crypto.randomUUID(),
         role: "assistant",
-        content: imageUrl ? (safePrompt || "Aqui está a imagem gerada.") : textContent,
+        content: imageUrl
+          ? (safePrompt || "Aqui está a imagem gerada.")
+          : (textContent || "Não consegui gerar a imagem."),
         type: imageUrl ? "image" : "text",
         mediaUrl: imageUrl,
         timestamp: new Date().toISOString(),
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
     console.error("Kojak Vision error:", error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Erro no processamento de visão" }),
+<<<< lovable-sync-1786317085
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+=======
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  main
     );
   }
 });

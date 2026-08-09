@@ -22,8 +22,8 @@ interface ChatAreaProps {
   referenceImage?: string | null;
   onSelectReference?: (url: string) => void;
   onClearReference?: () => void;
-  aiTier?: "basico" | "rapido" | "avancado" | "raciocinio";
-  onTierChange?: (tier: "basico" | "rapido" | "avancado" | "raciocinio") => void;
+  aiTier?: "rapido" | "raciocinio";
+  onTierChange?: (tier: "rapido" | "raciocinio") => void;
   isLoggedIn?: boolean;
   onRequireLogin?: () => void;
 }

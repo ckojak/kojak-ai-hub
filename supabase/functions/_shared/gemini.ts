@@ -146,6 +146,7 @@ export function geminiStreamToOpenAISSE(body: ReadableStream<Uint8Array>) {
     },
   });
 }
+lovable-sync-1786317085
 
 const LANGUAGE_NAMES: Record<string, string> = {
   pt: "português do Brasil",
@@ -162,3 +163,4 @@ export function languageInstruction(language?: string): string {
   const name = LANGUAGE_NAMES[lang] || LANGUAGE_NAMES.pt;
   return `\n\n## IDIOMA OBRIGATÓRIO\nResponda SEMPRE em ${name}, independente do idioma em que o usuário escreveu, a menos que ele peça explicitamente outro idioma.`;
 }
+main

@@ -4,10 +4,7 @@ import {
   GEMINI_BASE,
   geminiErrorResponse,
   geminiStreamToOpenAISSE,
-< lovable-sync-1786317085
-=======
   languageInstruction,
-  main
   missingKeyResponse,
   toGeminiContents,
 } from "../_shared/gemini.ts";
@@ -50,11 +47,7 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-<<<<<< lovable-sync-1786317085
-    const { prompt, history, context, mode, tier, stream = true } = body || {};
-=======
     const { prompt, history, context, mode, tier, language, stream = true } = body || {};
-  main
     const MODEL = pickModel(mode, tier);
 
     if (!prompt) {
@@ -69,11 +62,7 @@ serve(async (req) => {
 
     const systemContent = (context && typeof context === "string" && context.trim()
       ? `${SYSTEM_PROMPT}\n\n## CONTEXTO DO USUÁRIO\n${context.trim()}`
-<<<<< lovable-sync-1786317085
-      : SYSTEM_PROMPT;
-=======
       : SYSTEM_PROMPT) + languageInstruction(language);
-    main
 
     const messages: any[] = [];
     if (Array.isArray(history)) {

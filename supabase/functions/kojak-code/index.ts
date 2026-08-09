@@ -8,7 +8,15 @@ import {
   toGeminiContents,
 } from "../_shared/gemini.ts";
 
-const MODEL = "gemini-3.5-flash";
+const FAST_MODEL = "gemini-3.5-flash";
+const THINKING_MODEL = "gemini-3.1-pro-preview";
+
+/** Aceita mode: "fast" | "thinking" ou tier: "rapido" | "raciocinio". */
+function pickModel(mode?: string, tier?: string) {
+  const v = String(mode || tier || "").toLowerCase();
+  return ["thinking", "raciocinio", "pro", "avancado"].includes(v) ? THINKING_MODEL : FAST_MODEL;
+}
+
 
 const SYSTEM_PROMPT = `Você é Kojak IA — um parceiro de conversa inteligente, didático e humano.
 

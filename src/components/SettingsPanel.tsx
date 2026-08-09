@@ -21,7 +21,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
-import { useLanguage, LANGUAGES } from "@/hooks/useLanguage";
+import { useLanguage, LANGUAGES, LOCALE_MAP } from "@/hooks/useLanguage";
 import { supabase } from "@/integrations/supabase/client";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
@@ -40,12 +40,6 @@ interface ActivityItem {
   created_at: string;
 }
 
-const themeOptions = [
-  { id: "system", label: "Sistema", icon: Monitor },
-  { id: "light", label: "Claro", icon: Sun },
-  { id: "dark", label: "Escuro", icon: Moon },
-] as const;
-
 export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
@@ -59,6 +53,21 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
   const { language, setLanguage, t } = useLanguage();
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  const themeOptions = [
+    { id: "system", label: t("system"), icon: Monitor },
+    { id: "light", label: t("light"), icon: Sun },
+    { id: "dark", label: t("dark"), icon: Moon },
+  ] as const;
+
+  const menuItems = [
+    { id: "activity", label: t("menuActivity"), icon: History },
+    { id: "context", label: t("menuContext"), icon: Brain },
+    { id: "apps", label: t("menuApps"), icon: Plug },
+    { id: "theme", label: t("menuTheme"), icon: Palette },
+    { id: "language", label: t("language"), icon: Globe },
+    { id: "location", label: t("menuLocation"), icon: MapPin },
+  ];
 
   // Fetch activity log
   useEffect(() => {
@@ -117,14 +126,14 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
 
     if (error) {
       toast({
-        title: "Erro",
-        description: "Não foi possível salvar o contexto.",
+        title: t("errorTitle"),
+        description: t("errorSaveContext"),
         variant: "destructive",
       });
     } else {
       toast({
-        title: "Salvo!",
-        description: "Contexto pessoal atualizado.",
+        title: t("savedTitle"),
+        description: t("savedDesc"),
       });
     }
   };
@@ -138,8 +147,8 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
     if (!error) {
       setActivities([]);
       toast({
-        title: "Histórico limpo",
-        description: "Todas as atividades foram removidas.",
+        title: t("clearedTitle"),
+        description: t("clearedDesc"),
       });
     }
   };
@@ -151,7 +160,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
-    return date.toLocaleDateString("pt-BR", {
+    return date.toLocaleDateString(LOCALE_MAP[language], {
       day: "2-digit",
       month: "short",
       hour: "2-digit",
@@ -159,35 +168,26 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
     });
   };
 
-  const menuItems = [
-    { id: "activity", label: "Atividade", icon: History },
-    { id: "context", label: "Contexto Pessoal", icon: Brain },
-    { id: "apps", label: "Apps Conectados", icon: Plug },
-    { id: "theme", label: "Tema", icon: Palette },
-    { id: "language", label: "Idioma", icon: Globe },
-    { id: "location", label: "Localização", icon: MapPin },
-  ];
-
   const renderContent = () => {
     switch (activeSection) {
       case "activity":
         return (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold">Histórico de Atividades</h3>
+              <h3 className="font-semibold">{t("activityTitle")}</h3>
               {activities.length > 0 && (
                 <button
                   onClick={handleClearActivities}
                   className="text-xs text-destructive hover:underline flex items-center gap-1"
                 >
                   <Trash2 className="w-3 h-3" />
-                  Limpar tudo
+                  {t("clearAll")}
                 </button>
               )}
             </div>
             {activities.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">
-                Nenhuma atividade registrada ainda.
+                {t("noActivity")}
               </p>
             ) : (
               <div className="space-y-2 max-h-[400px] overflow-y-auto chat-scrollbar">
@@ -210,14 +210,14 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
       case "context":
         return (
           <div className="space-y-4">
-            <h3 className="font-semibold">Contexto Pessoal</h3>
+            <h3 className="font-semibold">{t("contextTitle")}</h3>
             <p className="text-sm text-muted-foreground">
-              Adicione informações que a Kojak.AI deve lembrar sobre você para personalizar as respostas.
+              {t("contextDesc")}
             </p>
             <Textarea
               value={personalContext}
               onChange={(e) => setPersonalContext(e.target.value)}
-              placeholder="Ex: Sou desenvolvedor web, prefiro exemplos em TypeScript, trabalho com React..."
+              placeholder={t("contextPlaceholder")}
               className="min-h-[150px] bg-foreground/5 border-border"
             />
             <button
@@ -228,10 +228,10 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
               {saving ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Salvando...
+                  {t("saving")}
                 </>
               ) : (
-                "Salvar Contexto"
+                t("saveContext")
               )}
             </button>
           </div>
@@ -240,17 +240,17 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
       case "apps":
         return (
           <div className="space-y-4">
-            <h3 className="font-semibold">Apps Conectados</h3>
+            <h3 className="font-semibold">{t("appsTitle")}</h3>
             <p className="text-sm text-muted-foreground">
-              Gerencie as integrações externas da sua conta.
+              {t("appsDesc")}
             </p>
             <div className="text-center py-8 glass-card rounded-xl">
               <Plug className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
               <p className="text-sm text-muted-foreground">
-                Nenhum app conectado ainda.
+                {t("noAppsConnected")}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                Em breve você poderá conectar Google Drive, Notion e mais.
+                {t("appsComingSoon")}
               </p>
             </div>
           </div>
@@ -259,9 +259,9 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
       case "theme":
         return (
           <div className="space-y-4">
-            <h3 className="font-semibold">Tema</h3>
+            <h3 className="font-semibold">{t("theme")}</h3>
             <p className="text-sm text-muted-foreground">
-              Escolha como a interface deve aparecer.
+              {t("themeDescription")}
             </p>
             <div className="space-y-2">
               {themeOptions.map((option) => {
@@ -320,7 +320,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                     </span>
                     {isPrimary && (
                       <span className="text-[10px] uppercase tracking-wide text-muted-foreground bg-foreground/10 px-2 py-0.5 rounded-full">
-                        Principal
+                        {t("primary")}
                       </span>
                     )}
                     {isActive && (
@@ -336,18 +336,18 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
       case "location":
         return (
           <div className="space-y-4">
-            <h3 className="font-semibold">Localização</h3>
+            <h3 className="font-semibold">{t("menuLocation")}</h3>
             <p className="text-sm text-muted-foreground">
-              Sua localização é usada para personalizar respostas.
+              {t("locationDesc")}
             </p>
             <div className="p-4 rounded-xl glass-card flex items-center gap-3">
               <MapPin className="w-5 h-5 text-primary" />
               {loadingLocation ? (
-                <span className="text-sm text-muted-foreground">Detectando...</span>
+                <span className="text-sm text-muted-foreground">{t("detecting")}</span>
               ) : location ? (
                 <span className="text-sm">{location}</span>
               ) : (
-                <span className="text-sm text-muted-foreground">Localização não detectada</span>
+                <span className="text-sm text-muted-foreground">{t("locationNotDetected")}</span>
               )}
             </div>
             <button
@@ -356,7 +356,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
               className="text-sm text-primary hover:underline flex items-center gap-1"
             >
               <MapPin className="w-4 h-4" />
-              Atualizar localização
+              {t("updateLocation")}
             </button>
           </div>
         );
@@ -376,7 +376,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-border">
             <h2 className="text-lg font-semibold">
-              {activeSection ? menuItems.find((m) => m.id === activeSection)?.label : "Configurações"}
+              {activeSection ? menuItems.find((m) => m.id === activeSection)?.label : t("settings")}
             </h2>
             <button
               onClick={() => activeSection ? setActiveSection(null) : onOpenChange(false)}
@@ -394,7 +394,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                   onClick={() => setActiveSection(null)}
                   className="text-sm text-muted-foreground hover:text-foreground mb-4 flex items-center gap-1"
                 >
-                  ← Voltar
+                  ← {t("back")}
                 </button>
                 {renderContent()}
               </div>
@@ -430,7 +430,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                 </Avatar>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium truncate">
-                    {profile.full_name || "Usuário"}
+                    {profile.full_name || t("defaultUserName")}
                   </p>
                   <p className="text-xs text-muted-foreground truncate">
                     {profile.email || user.email}
@@ -442,7 +442,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                 className="w-full flex items-center justify-center gap-2 p-3 rounded-xl text-destructive hover:bg-destructive/10 transition-colors"
               >
                 <LogOut className="w-4 h-4" />
-                <span className="font-medium">Sair da conta</span>
+                <span className="font-medium">{t("logout")}</span>
               </button>
             </div>
           )}
@@ -458,10 +458,10 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                 className="w-full flex items-center justify-center gap-2 p-4 rounded-xl bg-gradient-purple text-white font-semibold glow-purple hover:scale-[1.02] transition-all"
               >
                 <LogIn className="w-5 h-5" />
-                <span>Fazer login</span>
+                <span>{t("login")}</span>
               </button>
               <p className="text-xs text-muted-foreground text-center mt-2">
-                Entre para salvar suas conversas e preferências.
+                {t("loginDescription")}
               </p>
             </div>
           )}

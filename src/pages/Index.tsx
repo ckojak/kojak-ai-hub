@@ -26,7 +26,7 @@ const modeConfig: Record<string, { function: string; streams: boolean }> = {
 
 const Index = () => {
   const [activeMode, setActiveMode] = useState("chat");
-  const [aiTier, setAiTier] = useState<"basico" | "rapido" | "avancado" | "raciocinio">("basico");
+  const [aiTier, setAiTier] = useState<"rapido" | "raciocinio">("rapido");
   const [isLoading, setIsLoading] = useState(false);
   const [streamingContent, setStreamingContent] = useState<string>("");
   const [historyOpen, setHistoryOpen] = useState(false);

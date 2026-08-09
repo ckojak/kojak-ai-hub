@@ -8,7 +8,15 @@ import {
   toGeminiContents,
 } from "../_shared/gemini.ts";
 
-const MODEL = "gemini-3.5-flash";
+const FAST_MODEL = "gemini-3.5-flash";
+const THINKING_MODEL = "gemini-3.1-pro-preview";
+
+/** Aceita mode: "fast" | "thinking" ou tier: "rapido" | "raciocinio". */
+function pickModel(mode?: string, tier?: string) {
+  const v = String(mode || tier || "").toLowerCase();
+  return ["thinking", "raciocinio", "pro", "avancado"].includes(v) ? THINKING_MODEL : FAST_MODEL;
+}
+
 
 const SYSTEM_PROMPT = `Você é Kojak IA — especialista em Saúde, Medicina e Ciências da Vida, conversando como um médico-amigo didático.
 
@@ -38,7 +46,8 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { prompt, history, context, stream = true } = body || {};
+    const { prompt, history, context, mode, tier, stream = true } = body || {};
+    const MODEL = pickModel(mode, tier);
 
     if (!prompt) {
       return new Response(

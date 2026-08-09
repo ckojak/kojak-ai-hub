@@ -1,4 +1,4 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useMemo } from "react";
 import { ChatMessage, Message } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { TypingIndicator } from "./TypingIndicator";
@@ -41,33 +41,70 @@ const suggestions: Record<string, string[]> = {
     "Me explique como funciona a IA generativa",
     "Quais são as tendências de tecnologia em 2026?",
     "Dicas práticas para produtividade",
+    "Como investir com pouco dinheiro?",
+    "Me dá ideias de negócio pra começar",
+    "Explica um assunto complexo de forma simples",
+    "Como melhorar minha comunicação no trabalho?",
+    "Quais livros valem a pena ler esse ano?",
+    "Como funciona o mercado de criptomoedas?",
   ],
   code: [
     "Crie uma API REST em Node.js com Express",
     "Componente React de formulário de login",
     "Script Python para web scraping",
+    "Explica diferença entre SQL e NoSQL",
+    "Função JavaScript pra validar CPF",
+    "Como configurar autenticação com Supabase",
+    "Otimiza esse código pra rodar mais rápido",
+    "Cria um bot simples de Telegram",
+    "Como funciona Docker na prática",
   ],
   vision: [
     "Logo minimalista para startup de tecnologia",
     "Cidade cyberpunk futurista ao entardecer",
     "Banner profissional para rede social",
+    "Retrato estilo pintura a óleo",
+    "Paisagem de montanha ao nascer do sol",
+    "Personagem de anime em estilo realista",
+    "Capa de álbum musical futurista",
+    "Ilustração de floresta mágica",
+    "Design de embalagem de produto premium",
   ],
   motion: [
     "Ondas do mar ao pôr do sol em câmera lenta",
     "Animação abstrata com partículas coloridas",
     "Montanhas com nuvens passando rapidamente",
+    "Chuva caindo numa janela à noite",
+    "Fogueira crepitando em close",
+    "Cidade iluminada à noite, câmera aérea",
+    "Flores desabrochando em timelapse",
+    "Fumaça colorida se movendo no ar",
+    "Estrelas e galáxias em movimento",
   ],
   saude: [
     "Como aliviar dor de cabeça sem remédio",
     "Alimentação para ganho de massa magra",
     "Quando devo procurar um médico com urgência?",
+    "Como melhorar a qualidade do sono",
+    "Sinais de estresse que não posso ignorar",
+    "Benefícios de caminhar todo dia",
+    "Como reduzir a ansiedade no dia a dia",
+    "Alimentos que ajudam a imunidade",
+    "Diferença entre gripe e resfriado",
   ],
 };
+
+function pickRandomSuggestions(pool: string[], count = 3): string[] {
+  const shuffled = [...pool].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count);
+}
 
 function EmptyState({ mode, onSuggestionClick }: { mode: string; onSuggestionClick: (text: string) => void }) {
   const info = modeInfo[mode as keyof typeof modeInfo] || modeInfo.chat;
   const Icon = info.icon;
-  const modeSuggestions = suggestions[mode] || suggestions.chat;
+  const pool = suggestions[mode] || suggestions.chat;
+  // useMemo garante que sorteia só quando o modo muda, não a cada re-render
+  const modeSuggestions = useMemo(() => pickRandomSuggestions(pool), [mode]);
 
   return (
     <div className="flex-1 flex items-center justify-center p-6">
@@ -147,7 +184,7 @@ export function ChatArea({
 
   return (
     <div className="flex flex-col h-full">
-      {messages.length === 0 ? (
+      {messages.length === 0 && !isLoading ? (
         <EmptyState mode={activeMode} onSuggestionClick={handleSuggestionClick} />
       ) : (
         <div className="flex-1 overflow-y-auto chat-scrollbar px-4 py-6">

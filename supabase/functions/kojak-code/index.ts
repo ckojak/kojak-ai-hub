@@ -4,6 +4,11 @@ import {
   GEMINI_BASE,
   geminiErrorResponse,
   geminiStreamToOpenAISSE,
+  
+  < lovable-sync-1786317085
+=======
+  languageInstruction,
+main
   missingKeyResponse,
   toGeminiContents,
 } from "../_shared/gemini.ts";
@@ -49,7 +54,11 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
+<<<<<  lovable-sync-1786317085
     const { prompt, image, history, context, mode, tier, stream = true } = body || {};
+=======
+    const { prompt, image, history, context, mode, tier, language, stream = true } = body || {}; 
+     main
     const MODEL = pickModel(mode, tier);
 
     if (!prompt && !image) {
@@ -62,9 +71,9 @@ serve(async (req) => {
     const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
     if (!GEMINI_API_KEY) return missingKeyResponse();
 
-    const systemContent = context && typeof context === "string" && context.trim()
+    const systemContent = (context && typeof context === "string" && context.trim()
       ? `${SYSTEM_PROMPT}\n\n## CONTEXTO DO USUÁRIO\n${context.trim()}`
-      : SYSTEM_PROMPT;
+      : SYSTEM_PROMPT) + languageInstruction(language);
 
     const messages: any[] = [];
 

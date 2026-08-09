@@ -215,7 +215,7 @@ export function ChatInput({
         </div>
 
         <div className="flex items-end gap-3 p-3">
-          <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
+          <input ref={fileInputRef} type="file" accept=".jpg,.jpeg,.png,.webp,.heic,.gif" onChange={handleImageSelect} className="hidden" />
           <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isLoading || isUploading} className={cn("flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-200", attachedImage ? "bg-primary/20 text-primary border border-primary/30" : "bg-foreground/5 text-muted-foreground hover:bg-foreground/10 hover:text-foreground")}>
             {attachedImage ? <ImageIcon className="w-5 h-5" /> : <Paperclip className="w-5 h-5" />}
           </button>

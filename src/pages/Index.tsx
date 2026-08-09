@@ -9,6 +9,7 @@ import { KojakLive } from "@/components/KojakLive";
 import { useChats, Message } from "@/hooks/useChats";
 import { useVoice } from "@/hooks/useVoice";
 import { useAuth } from "@/hooks/useAuth";
+import { useLanguage } from "@/hooks/useLanguage";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
@@ -26,7 +27,7 @@ const modeConfig: Record<string, { function: string; streams: boolean }> = {
 
 const Index = () => {
   const [activeMode, setActiveMode] = useState("chat");
-  const [aiTier, setAiTier] = useState<"basico" | "rapido" | "avancado" | "raciocinio">("basico");
+  const [aiTier, setAiTier] = useState<"rapido" | "raciocinio">("rapido");
   const [isLoading, setIsLoading] = useState(false);
   const [streamingContent, setStreamingContent] = useState<string>("");
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -36,6 +37,7 @@ const Index = () => {
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
 
   const { user, loading: authLoading, profile } = useAuth();
+  const { language, t } = useLanguage();
   const navigate = useNavigate();
   const { chats, currentChat, messages: dbMessages, createChat, selectChat, deleteChat, addMessage, updateChatTitle } = useChats();
   const { isListening, isSpeaking, transcript, startListening, stopListening, speak, stopSpeaking } = useVoice();
@@ -60,16 +62,11 @@ const Index = () => {
 
   const streamFromFunction = useCallback(async (fnName: string, payload: any): Promise<string> => {
     const url = `${SUPABASE_URL}/functions/v1/${fnName}`;
-    // Manda o token de login de verdade quando a pessoa está logada (necessário pra
-    // validação de identidade no servidor). Sem login, usa a chave pública normalmente.
-    const { data: sessionData } = await supabase.auth.getSession();
-    const accessToken = sessionData.session?.access_token || SUPABASE_PUBLISHABLE_KEY;
-
     const res = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
         apikey: SUPABASE_PUBLISHABLE_KEY,
       },
       body: JSON.stringify({ ...payload, stream: true }),
@@ -128,13 +125,6 @@ const Index = () => {
   const handleSendMessage = useCallback(async (content: string, mode: string, imageUrl?: string) => {
     if (!content.trim() && !imageUrl && !referenceImage) return;
 
-    // Marca "carregando" JÁ, antes de qualquer coisa assíncrona (criar chat, salvar
-    // mensagem no banco). Isso evita a tela de sugestões "piscar" de volta durante
-    // a brecha entre criar o chat (que troca pra uma conversa momentaneamente vazia)
-    // e a mensagem realmente aparecer.
-    setIsLoading(true);
-    setStreamingContent("");
-
     let chatId = currentChat?.id;
 
     if (user) {
@@ -142,7 +132,6 @@ const Index = () => {
         const newChat = await createChat(mode);
         if (!newChat) {
           toast({ title: "Erro", description: "Não foi possível criar a conversa", variant: "destructive" });
-          setIsLoading(false);
           return;
         }
         chatId = newChat.id;
@@ -168,6 +157,9 @@ const Index = () => {
       setLocalMessages(prev => [...prev, userMessage]);
     }
 
+    setIsLoading(true);
+    setStreamingContent("");
+
     try {
       const config = modeConfig[mode] || modeConfig.chat;
       const personalContext = profile?.personal_context || "";
@@ -180,7 +172,8 @@ const Index = () => {
         image: imageUrl,
         reference_image: referenceImage,
         tier: aiTier,
-        chatId, // NOVO enviado para edge funtions extrair memorias
+        language,
+        userId: user?.id ?? null,
       };
 
       if (config.streams) {
@@ -260,7 +253,7 @@ const Index = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [user, currentChat, createChat, addMessage, updateChatTitle, dbMessages, profile, toast, logActivity, referenceImage, localMessages.length, baseMessages, streamFromFunction, aiTier, navigate]);
+  }, [user, currentChat, createChat, addMessage, updateChatTitle, dbMessages, profile, toast, logActivity, referenceImage, localMessages.length, baseMessages, streamFromFunction, aiTier, language, navigate]);
 
   const handleNewChat = useCallback(async () => {
     if (user) await createChat(activeMode);
@@ -284,7 +277,7 @@ const Index = () => {
       <div className="h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-muted-foreground">Carregando...</p>
+          <p className="text-muted-foreground">{t("loading")}</p>
         </div>
       </div>
     );

@@ -7,14 +7,21 @@ import {
   urlToInlineData,
 } from "../_shared/gemini.ts";
 
-const MODEL = "gemini-3.1-flash-image";
+// Modelo leve por padrão (~3s). Qualidade máxima só sob demanda (quality: "high").
+const FAST_MODEL = "gemini-3.1-flash-lite-image";
+const HQ_MODEL = "gemini-3.1-flash-image";
+
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { prompt, image, reference_image } = body || {};
+    const { prompt, image, reference_image, quality, tier } = body || {};
+    const wantsHq = ["high", "alta", "raciocinio", "avancado"].includes(
+      String(quality || tier || "").toLowerCase(),
+    );
+    const MODEL = wantsHq ? HQ_MODEL : FAST_MODEL;
 
     const safePrompt = typeof prompt === "string" ? prompt.trim() : "";
     const hasImage = typeof image === "string" && image.length > 100;

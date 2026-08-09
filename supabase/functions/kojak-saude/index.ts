@@ -46,7 +46,8 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { prompt, history, context, stream = true } = body || {};
+    const { prompt, history, context, mode, tier, stream = true } = body || {};
+    const MODEL = pickModel(mode, tier);
 
     if (!prompt) {
       return new Response(

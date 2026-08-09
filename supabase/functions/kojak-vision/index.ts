@@ -77,7 +77,10 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         contents: [{ role: "user", parts }],
-        generationConfig: { responseModalities: ["IMAGE", "TEXT"] },
+        generationConfig: {
+          responseModalities: ["IMAGE", "TEXT"],
+          imageConfig: { imageSize: wantsHq ? "2K" : "1K" },
+        },
       }),
     });
 

@@ -8,7 +8,7 @@ import {
   toGeminiContents,
 } from "../_shared/gemini.ts";
 
-const MODEL = "gemini-2.5-flash";
+const MODEL = "gemini-3.5-flash";
 
 const SYSTEM_PROMPT = `Você é Kojak IA — um parceiro de conversa inteligente, didático e humano.
 

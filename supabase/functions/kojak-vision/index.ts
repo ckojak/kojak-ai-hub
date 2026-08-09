@@ -7,7 +7,7 @@ import {
   urlToInlineData,
 } from "../_shared/gemini.ts";
 
-const MODEL = "gemini-2.5-flash-image";
+const MODEL = "gemini-3.1-flash-image";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });

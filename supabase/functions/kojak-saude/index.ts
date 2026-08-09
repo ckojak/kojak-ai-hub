@@ -2,10 +2,15 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { retrieveRelevantMemories, extractMemories } from "./memoryService.ts"; // NOVO
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import {
+  corsHeaders,
+  GEMINI_BASE,
+  geminiErrorResponse,
+  geminiStreamToOpenAISSE,
+  languageInstruction,
+  missingKeyResponse,
+  toGeminiContents,
+} from "../_shared/gemini.ts";
 
 const SYSTEM_PROMPT = `Você é Kojak.AI operando como especialista em Saúde, Medicina e Ciências da Vida.
 

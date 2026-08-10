@@ -281,7 +281,7 @@ export function ChatInput({
           </button>
 
           {/* AJUSTE DO ZOOM APLICADO: text-base no lugar de text-sm */}
-          <textarea value={message} onChange={(e) => setMessage(e.target.value)} onKeyDown={handleKeyDown} placeholder={`Mensagem para Kojak ${currentMode.label}...`} className="flex-1 min-h-[44px] max-h-32 bg-transparent text-foreground placeholder:text-muted-foreground resize-none focus:outline-none text-base leading-relaxed" rows={1} disabled={isLoading || isUploading} />
+          <textarea value={message} onChange={(e) => setMessage(e.target.value)} onKeyDown={handleKeyDown} placeholder={`${t("typeMessage")}`} aria-label={t("typeMessage")} className="flex-1 min-h-[44px] max-h-32 bg-transparent text-foreground placeholder:text-muted-foreground resize-none focus:outline-none text-base leading-relaxed" rows={1} disabled={isLoading || isUploading} />
 
           {isSpeaking && (
             <button type="button" onClick={onStopSpeaking} className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl bg-secondary/20 text-secondary animate-pulse">

@@ -4,7 +4,14 @@ import {
   languageInstruction,
 } from "../_shared/gemini.ts";
 
-const GROQ_MODEL = "llama-3.3-70b-versatile";
+const FAST_MODEL = "llama-3.1-8b-instant";
+const THINKING_MODEL = "llama-3.3-70b-versatile";
+
+/** Aceita mode: "fast" | "thinking" ou tier: "rapido" | "raciocinio". */
+function pickModel(mode?: string, tier?: string) {
+  const v = String(mode || tier || "").toLowerCase();
+  return ["thinking", "raciocinio", "pro", "avancado"].includes(v) ? THINKING_MODEL : FAST_MODEL;
+}
 
 const SYSTEM_PROMPT = `Você é Kojak IA — um parceiro de conversa inteligente, didático e humano.
 
@@ -37,7 +44,8 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { prompt, image, history, context, language, stream = true } = body || {};
+    const { prompt, image, history, context, mode, tier, language, stream = true } = body || {};
+    const MODEL = pickModel(mode, tier);
 
     if (!prompt && !image) {
       return new Response(
@@ -80,7 +88,7 @@ serve(async (req) => {
     }
 
     const payload = {
-      model: GROQ_MODEL,
+      model: MODEL,
       messages: messages,
       temperature: 0.7,
       stream: stream,

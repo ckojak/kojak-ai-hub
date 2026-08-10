@@ -1,23 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import {
   corsHeaders,
-  GEMINI_BASE,
-  geminiErrorResponse,
-  geminiStreamToOpenAISSE,
   languageInstruction,
-  missingKeyResponse,
-  toGeminiContents,
 } from "../_shared/gemini.ts";
 
-const FAST_MODEL = "gemini-3.5-flash";
-const THINKING_MODEL = "gemini-3.1-pro-preview";
-
-/** Aceita mode: "fast" | "thinking" ou tier: "rapido" | "raciocinio". */
-function pickModel(mode?: string, tier?: string) {
-  const v = String(mode || tier || "").toLowerCase();
-  return ["thinking", "raciocinio", "pro", "avancado"].includes(v) ? THINKING_MODEL : FAST_MODEL;
-}
-
+const GROQ_MODEL = "llama-3.3-70b-versatile";
 
 const SYSTEM_PROMPT = `Você é Kojak IA — um parceiro de conversa inteligente, didático e humano.
 
@@ -50,8 +37,7 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { prompt, image, history, context, mode, tier, language, stream = true } = body || {};
-    const MODEL = pickModel(mode, tier);
+    const { prompt, image, history, context, language, stream = true } = body || {};
 
     if (!prompt && !image) {
       return new Response(
@@ -60,14 +46,21 @@ serve(async (req) => {
       );
     }
 
-    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-    if (!GEMINI_API_KEY) return missingKeyResponse();
+    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
+    if (!GROQ_API_KEY) {
+      return new Response(
+        JSON.stringify({ error: "GROQ_API_KEY não está configurada" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
 
     const systemContent = (context && typeof context === "string" && context.trim()
       ? `${SYSTEM_PROMPT}\n\n## CONTEXTO DO USUÁRIO\n${context.trim()}`
       : SYSTEM_PROMPT) + languageInstruction(language);
 
-    const messages: any[] = [];
+    const messages: any[] = [
+      { role: "system", content: systemContent }
+    ];
 
     if (Array.isArray(history)) {
       for (const m of history.slice(-15)) {
@@ -80,37 +73,38 @@ serve(async (req) => {
     if (image) {
       messages.push({
         role: "user",
-        content: [
-          { type: "text", text: prompt || "Analise esta imagem e descreva o que vê." },
-          { type: "image_url", image_url: { url: image } },
-        ],
+        content: prompt || "Analise esta imagem.",
       });
     } else {
       messages.push({ role: "user", content: prompt });
     }
 
     const payload = {
-      systemInstruction: { parts: [{ text: systemContent }] },
-      contents: toGeminiContents(messages),
+      model: GROQ_MODEL,
+      messages: messages,
+      temperature: 0.7,
+      stream: stream,
     };
 
-    const endpoint = stream
-      ? `${GEMINI_BASE}/${MODEL}:streamGenerateContent?alt=sse`
-      : `${GEMINI_BASE}/${MODEL}:generateContent`;
-
-    const response = await fetch(endpoint, {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
-        "x-goog-api-key": GEMINI_API_KEY,
+        "Authorization": `Bearer ${GROQ_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
     });
 
-    if (!response.ok) return await geminiErrorResponse(response, "Gemini error:");
+    if (!response.ok) {
+      const errText = await response.text();
+      return new Response(
+        JSON.stringify({ error: `Erro na API Groq: ${response.status} - ${errText}` }),
+        { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
 
     if (stream && response.body) {
-      return new Response(geminiStreamToOpenAISSE(response.body), {
+      return new Response(response.body, {
         headers: {
           ...corsHeaders,
           "Content-Type": "text/event-stream",
@@ -121,9 +115,7 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    const content = (data?.candidates?.[0]?.content?.parts ?? [])
-      .map((p: any) => p?.text ?? "")
-      .join("") || "Desculpe, não consegui processar sua solicitação.";
+    const content = data.choices?.[0]?.message?.content || "Desculpe, não consegui processar sua solicitação.";
     const hasCode = /```[\w]*\n[\s\S]*?```/.test(content);
 
     return new Response(
@@ -137,7 +129,7 @@ serve(async (req) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
-    console.error("Kojak Code error:", error);
+    console.error("Kojak Groq error:", error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Erro desconhecido no processamento" }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },

@@ -1,9 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders, GEMINI_BASE, urlToInlineData } from "../_shared/gemini.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -61,18 +58,32 @@ serve(async (req) => {
       }
     }
 
-    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${GEMINI_API_KEY}`,
-        "Content-Type": "application/json",
+    // Monta o body nativo do Gemini (o endpoint compat-OpenAI falha ao
+    // serializar imagens geradas: "Unhandled generated data mime type: image/jpeg")
+    const parts: any[] = [];
+    if (typeof messageContent === "string") {
+      parts.push({ text: messageContent });
+    } else {
+      for (const block of messageContent) {
+        if (block.type === "text") parts.push({ text: block.text });
+        else if (block.type === "image_url") {
+          const inline = await urlToInlineData(block.image_url.url);
+          if (inline) parts.push(inline);
+        }
+      }
+    }
+
+    const response = await fetch(
+      `${GEMINI_BASE}/gemini-3.1-flash-image:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts }],
+          generationConfig: { responseModalities: ["IMAGE", "TEXT"] },
+        }),
       },
-      body: JSON.stringify({
-        model: "gemini-3.1-flash-image",
-        messages: [{ role: "user", content: messageContent }],
-        modalities: ["image", "text"],
-      }),
-    });
+    );
 
     if (!response.ok) {
       const errText = await response.text().catch(() => "");
@@ -93,10 +104,17 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    const msg = data.choices?.[0]?.message || {};
-    const textContent = msg.content || "Imagem gerada.";
-    // A Gemini devolve a imagem em message.images[0].image_url.url (base64 data URL)
-    const imageUrl = msg.images?.[0]?.image_url?.url || null;
+    const respParts = data?.candidates?.[0]?.content?.parts ?? [];
+    let imageUrl: string | null = null;
+    let textContent = "";
+    for (const part of respParts) {
+      if (part?.inlineData?.data) {
+        imageUrl = `data:${part.inlineData.mimeType || "image/png"};base64,${part.inlineData.data}`;
+      } else if (typeof part?.text === "string") {
+        textContent += part.text;
+      }
+    }
+    textContent = textContent.trim() || "Imagem gerada.";
 
     return new Response(
       JSON.stringify({

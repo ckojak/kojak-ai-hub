@@ -2,8 +2,10 @@ import { useRef, useEffect, useMemo } from "react";
 import { ChatMessage, Message } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { TypingIndicator } from "./TypingIndicator";
-import { Sparkles, Code2, Camera, Play, MessageCircle, HeartPulse } from "lucide-react";
+import { Code2, Camera, Play, MessageCircle, HeartPulse } from "lucide-react";
 import { KOJAK_LOGO_BASE64 } from "@/assets/kojak-logo";
+import { useLanguage } from "@/hooks/useLanguage";
+import { suggestionsByLang } from "@/i18n/suggestions";
 import { cn } from "@/lib/utils";
 
 interface ChatAreaProps {
@@ -29,69 +31,11 @@ interface ChatAreaProps {
 }
 
 const modeInfo = {
-  chat: { icon: MessageCircle, label: "Conversa Livre", color: "text-emerald-400", description: "Converse livremente sobre qualquer assunto" },
-  code: { icon: Code2, label: "Kojak Code", color: "text-blue-400", description: "Crie aplicativos e código profissional" },
-  vision: { icon: Camera, label: "Kojak Vision", color: "text-amber-400", description: "Gere imagens profissionais com IA" },
-  motion: { icon: Play, label: "Kojak Motion", color: "text-rose-400", description: "Crie vídeos em alta definição" },
-  saude: { icon: HeartPulse, label: "Kojak Saúde", color: "text-pink-400", description: "Estrategista científico em Saúde Pública" },
-};
-
-const suggestions: Record<string, string[]> = {
-  chat: [
-    "Me explique como funciona a IA generativa",
-    "Quais são as tendências de tecnologia em 2026?",
-    "Dicas práticas para produtividade",
-    "Como investir com pouco dinheiro?",
-    "Me dá ideias de negócio pra começar",
-    "Explica um assunto complexo de forma simples",
-    "Como melhorar minha comunicação no trabalho?",
-    "Quais livros valem a pena ler esse ano?",
-    "Como funciona o mercado de criptomoedas?",
-  ],
-  code: [
-    "Crie uma API REST em Node.js com Express",
-    "Componente React de formulário de login",
-    "Script Python para web scraping",
-    "Explica diferença entre SQL e NoSQL",
-    "Função JavaScript pra validar CPF",
-    "Como configurar autenticação com Supabase",
-    "Otimiza esse código pra rodar mais rápido",
-    "Cria um bot simples de Telegram",
-    "Como funciona Docker na prática",
-  ],
-  vision: [
-    "Logo minimalista para startup de tecnologia",
-    "Cidade cyberpunk futurista ao entardecer",
-    "Banner profissional para rede social",
-    "Retrato estilo pintura a óleo",
-    "Paisagem de montanha ao nascer do sol",
-    "Personagem de anime em estilo realista",
-    "Capa de álbum musical futurista",
-    "Ilustração de floresta mágica",
-    "Design de embalagem de produto premium",
-  ],
-  motion: [
-    "Ondas do mar ao pôr do sol em câmera lenta",
-    "Animação abstrata com partículas coloridas",
-    "Montanhas com nuvens passando rapidamente",
-    "Chuva caindo numa janela à noite",
-    "Fogueira crepitando em close",
-    "Cidade iluminada à noite, câmera aérea",
-    "Flores desabrochando em timelapse",
-    "Fumaça colorida se movendo no ar",
-    "Estrelas e galáxias em movimento",
-  ],
-  saude: [
-    "Como aliviar dor de cabeça sem remédio",
-    "Alimentação para ganho de massa magra",
-    "Quando devo procurar um médico com urgência?",
-    "Como melhorar a qualidade do sono",
-    "Sinais de estresse que não posso ignorar",
-    "Benefícios de caminhar todo dia",
-    "Como reduzir a ansiedade no dia a dia",
-    "Alimentos que ajudam a imunidade",
-    "Diferença entre gripe e resfriado",
-  ],
+  chat: { icon: MessageCircle, label: "modeChat", color: "text-emerald-400", description: "modeChatDesc" },
+  code: { icon: Code2, label: "modeCode", color: "text-blue-400", description: "modeCodeDesc" },
+  vision: { icon: Camera, label: "modeVision", color: "text-amber-400", description: "modeVisionDesc" },
+  motion: { icon: Play, label: "modeMotion", color: "text-rose-400", description: "modeMotionDesc" },
+  saude: { icon: HeartPulse, label: "modeSaude", color: "text-pink-400", description: "modeSaudeDesc" },
 };
 
 function pickRandomSuggestions(pool: string[], count = 3): string[] {
@@ -100,11 +44,12 @@ function pickRandomSuggestions(pool: string[], count = 3): string[] {
 }
 
 function EmptyState({ mode, onSuggestionClick }: { mode: string; onSuggestionClick: (text: string) => void }) {
+  const { t, language } = useLanguage();
   const info = modeInfo[mode as keyof typeof modeInfo] || modeInfo.chat;
   const Icon = info.icon;
-  const pool = suggestions[mode] || suggestions.chat;
-  // useMemo garante que sorteia só quando o modo muda, não a cada re-render
-  const modeSuggestions = useMemo(() => pickRandomSuggestions(pool), [mode]);
+  const pool = suggestionsByLang[language]?.[mode] || suggestionsByLang[language]?.chat || [];
+  // Sorteia só quando o modo ou o idioma muda, não a cada re-render.
+  const modeSuggestions = useMemo(() => pickRandomSuggestions(pool), [mode, language]);
 
   return (
     <div className="flex-1 flex items-center justify-center p-6">
@@ -112,24 +57,22 @@ function EmptyState({ mode, onSuggestionClick }: { mode: string; onSuggestionCli
         <div className="relative w-20 h-20 mx-auto mb-6">
           <div className="absolute inset-0 bg-gradient-purple rounded-2xl blur-xl opacity-50 animate-pulse-slow" />
           <div className="relative w-full h-full rounded-2xl bg-gradient-purple flex items-center justify-center glow-purple-lg overflow-hidden">
-            <img src={KOJAK_LOGO_BASE64} alt="Kojak.AI" className="w-full h-full object-cover" />
+            <img src={KOJAK_LOGO_BASE64} alt="Kojak IA" className="w-full h-full object-cover" />
           </div>
         </div>
 
-        <p className="text-muted-foreground mb-6">
-          Plataforma Multimodal de Artificial Intelligence
-        </p>
+        <p className="text-muted-foreground mb-6">{t("tagline")}</p>
 
         <div className="glass-card rounded-2xl p-4 mb-6 neon-border">
           <div className="flex items-center justify-center gap-2 mb-2">
             <Icon className={cn("w-5 h-5", info.color)} />
-            <span className="font-semibold">{info.label}</span>
+            <span className="font-semibold">{t(info.label)}</span>
           </div>
-          <p className="text-sm text-muted-foreground">{info.description}</p>
+          <p className="text-sm text-muted-foreground">{t(info.description)}</p>
         </div>
 
         <div className="space-y-2">
-          <p className="text-xs text-muted-foreground mb-3">Experimente perguntar:</p>
+          <p className="text-xs text-muted-foreground mb-3">{t("tryAsking")}</p>
           <div className="flex flex-wrap justify-center gap-2">
             {modeSuggestions.map((text, index) => (
               <button
@@ -170,12 +113,8 @@ export function ChatArea({
 }: ChatAreaProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
   useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
   const handleSuggestionClick = (text: string) => {
@@ -194,7 +133,7 @@ export function ChatArea({
                 key={message.id}
                 message={message}
                 onSpeak={onSpeak}
-                onSelectReference={onSelectReference} // <--- REPASSE PARA A MENSAGEM
+                onSelectReference={onSelectReference}
               />
             ))}
             {isLoading && <TypingIndicator />}
@@ -214,8 +153,8 @@ export function ChatArea({
         onStartListening={onStartListening}
         onStopListening={onStopListening}
         onStopSpeaking={onStopSpeaking}
-        referenceImage={referenceImage}     // <--- REPASSE PARA O VISOR DO INPUT
-        onClearReference={onClearReference} // <--- REPASSE PARA O VISOR DO INPUT
+        referenceImage={referenceImage}
+        onClearReference={onClearReference}
         aiTier={aiTier}
         onTierChange={onTierChange}
         isLoggedIn={isLoggedIn}

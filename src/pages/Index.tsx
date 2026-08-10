@@ -27,7 +27,7 @@ const modeConfig: Record<string, { function: string; streams: boolean }> = {
 
 const Index = () => {
   const [activeMode, setActiveMode] = useState("chat");
-  const [aiTier, setAiTier] = useState<"rapido" | "raciocinio">("rapido");
+  const [aiTier, setAiTier] = useState<"basico" | "rapido" | "avancado" | "raciocinio">("rapido");
   const [isLoading, setIsLoading] = useState(false);
   const [streamingContent, setStreamingContent] = useState<string>("");
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -163,7 +163,7 @@ const Index = () => {
     try {
       const config = modeConfig[mode] || modeConfig.chat;
       const personalContext = profile?.personal_context || "";
-      const recentHistory = baseMessages.slice(-10).map((m) => ({ role: m.role, content: m.content }));
+      const recentHistory = baseMessages.slice(-20).map((m) => ({ role: m.role, content: m.content }));
 
       const payload = {
         prompt: content,

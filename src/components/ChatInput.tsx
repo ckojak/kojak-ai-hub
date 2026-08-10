@@ -5,10 +5,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
 const TIER_OPTIONS = [
-  { id: "rapido" as const, label: "Rápido", emoji: "⚡" },
-  { id: "raciocinio" as const, label: "Pensando", emoji: "🧠" },
+  { id: "basico" as const, label: "Básico", emoji: "🟢", locked: false },
+  { id: "rapido" as const, label: "Rápido", emoji: "⚡", locked: false },
+  { id: "avancado" as const, label: "Avançado", emoji: "🚀", locked: true },
+  { id: "raciocinio" as const, label: "Raciocínio", emoji: "🧠", locked: true },
 ];
-
 
 interface ChatInputProps {
   onSend: (message: string, mode: string, imageUrl?: string) => void;
@@ -23,8 +24,8 @@ interface ChatInputProps {
   onStopSpeaking?: () => void;
   referenceImage?: string | null; // <--- NOVO: Recebe a imagem alvo
   onClearReference?: () => void;  // <--- NOVO: Função para limpar a imagem alvo
-  aiTier?: "rapido" | "raciocinio";
-  onTierChange?: (tier: "rapido" | "raciocinio") => void;
+  aiTier?: "basico" | "rapido" | "avancado" | "raciocinio";
+  onTierChange?: (tier: "basico" | "rapido" | "avancado" | "raciocinio") => void;
   isLoggedIn?: boolean;
   onRequireLogin?: () => void;
 }
@@ -49,12 +50,14 @@ export function ChatInput({
   onStopSpeaking,
   referenceImage,
   onClearReference,
-  aiTier = "rapido",
+  aiTier = "basico",
   onTierChange,
   isLoggedIn = false,
   onRequireLogin,
 }: ChatInputProps) {
   const [message, setMessage] = useState("");
+  const [tierMenuOpen, setTierMenuOpen] = useState(false);
+  const tierMenuRef = useRef<HTMLDivElement>(null);
   const [attachedImage, setAttachedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -67,8 +70,16 @@ export function ChatInput({
     }
   }, [voiceTranscript]);
 
-
-
+  useEffect(() => {
+    if (!tierMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (tierMenuRef.current && !tierMenuRef.current.contains(e.target as Node)) {
+        setTierMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [tierMenuOpen]);
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -175,31 +186,53 @@ export function ChatInput({
           </div>
         )}
 
-        {/* Toggle discreto: Rápido / Pensando */}
-        <div className="flex items-center justify-end gap-1 px-4 pt-2 pb-1">
-          <div className="inline-flex items-center rounded-full bg-foreground/5 p-0.5">
-            {TIER_OPTIONS.map((option) => {
-              const isActive = aiTier === option.id;
-              return (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={() => onTierChange?.(option.id)}
-                  title={option.id === "rapido" ? "Respostas rápidas" : "Raciocínio mais profundo (mais lento)"}
-                  className={cn(
-                    "px-2.5 py-1 rounded-full text-[11px] font-medium transition-all",
-                    isActive
-                      ? "bg-primary/20 text-primary border border-primary/30"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  {option.emoji} {option.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        {/* Toggle de Tier: Básico / Rápido / Avançado / Raciocínio Premium */}
+        <div className="relative px-4 pt-3 pb-2 border-b border-border" ref={tierMenuRef}>
+          <button
+            type="button"
+            onClick={() => setTierMenuOpen((v) => !v)}
+            className="flex items-center justify-between w-full text-left"
+          >
+            <span className="text-xs text-muted-foreground">Modo de IA:</span>
+            <span className="flex items-center gap-1 text-xs font-semibold text-primary">
+              {TIER_OPTIONS.find((o) => o.id === aiTier)?.emoji}{" "}
+              {TIER_OPTIONS.find((o) => o.id === aiTier)?.label}
+              <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", tierMenuOpen && "rotate-180")} />
+            </span>
+          </button>
 
+          {tierMenuOpen && (
+            <div className="absolute left-4 right-4 bottom-full mb-1 z-20 bg-background border border-border rounded-xl shadow-lg overflow-hidden animate-fade-in">
+              {TIER_OPTIONS.map((option) => {
+                const isActive = aiTier === option.id;
+                const isBlocked = option.locked && !isLoggedIn;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => {
+                      setTierMenuOpen(false);
+                      if (isBlocked) {
+                        onRequireLogin?.();
+                        return;
+                      }
+                      onTierChange?.(option.id);
+                    }}
+                    className={cn(
+                      "flex items-center justify-between w-full px-4 py-3 text-sm transition-colors",
+                      isActive ? "bg-primary/15 text-primary font-semibold" : "text-foreground hover:bg-foreground/5",
+                      isBlocked && "opacity-60"
+                    )}
+                  >
+                    <span>{option.emoji} {option.label}</span>
+                    {isBlocked && <span className="text-xs">🔒 Login</span>}
+                    {isActive && !isBlocked && <span className="w-2 h-2 rounded-full bg-primary" />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         <div className="hidden md:flex items-center gap-1 px-4 pt-3 pb-2 border-b border-border">
           <span className="text-xs text-muted-foreground mr-2">Modo:</span>

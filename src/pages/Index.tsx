@@ -172,10 +172,7 @@ const Index = () => {
         image: imageUrl,
         reference_image: referenceImage,
         tier: aiTier,
-        lovable-sync-1786317085
-
         language,
-        main
         userId: user?.id ?? null,
       };
 

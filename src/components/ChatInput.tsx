@@ -1,14 +1,15 @@
 import { useState, useEffect, useRef } from "react";
-import { Send, Code2, Camera, Play, MessageCircle, Loader2, Mic, MicOff, Volume2, VolumeX, Paperclip, X, Image as ImageIcon, Sparkles, ChevronDown } from "lucide-react";
+import { Send, Code2, Camera, Play, MessageCircle, Loader2, Mic, MicOff, VolumeX, Paperclip, X, Image as ImageIcon, Sparkles, ChevronDown, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useLanguage } from "@/hooks/useLanguage";
 
 const TIER_OPTIONS = [
-  { id: "basico" as const, label: "Básico", emoji: "🟢", locked: false },
-  { id: "rapido" as const, label: "Rápido", emoji: "⚡", locked: false },
-  { id: "avancado" as const, label: "Avançado", emoji: "🚀", locked: true },
-  { id: "raciocinio" as const, label: "Raciocínio", emoji: "🧠", locked: true },
+  { id: "basico" as const, label: "tierBasico", desc: "tierBasicoDesc", emoji: "🟢", locked: false },
+  { id: "rapido" as const, label: "tierRapido", desc: "tierRapidoDesc", emoji: "⚡", locked: false },
+  { id: "avancado" as const, label: "tierAvancado", desc: "tierAvancadoDesc", emoji: "🚀", locked: true },
+  { id: "raciocinio" as const, label: "tierRaciocinio", desc: "tierRaciocinioDesc", emoji: "🧠", locked: true },
 ];
 
 interface ChatInputProps {

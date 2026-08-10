@@ -64,6 +64,7 @@ export function ChatInput({
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const { t } = useLanguage();
 
   useEffect(() => {
     if (voiceTranscript) {

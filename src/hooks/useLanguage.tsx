@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { extraTranslations } from "@/i18n/extra";
 
 export type Language = "pt" | "en" | "es" | "de" | "zh";
 
@@ -317,7 +318,13 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   const setLanguage = (lang: Language) => setLanguageState(lang);
 
   const t = (key: string): string => {
-    return translations[language]?.[key] ?? translations.pt[key] ?? key;
+    return (
+      translations[language]?.[key] ??
+      extraTranslations[language]?.[key] ??
+      translations.pt[key] ??
+      extraTranslations.pt[key] ??
+      key
+    );
   };
 
   return (

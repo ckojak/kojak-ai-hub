@@ -155,7 +155,7 @@ export function ChatInput({
     }
   };
 
-  const currentMode = modes.find((m) => m.id === activeMode) || modes[0];
+
 
   return (
     <div className="sticky bottom-0 p-4 pb-20 md:pb-4 bg-gradient-to-t from-background via-background/95 to-transparent">

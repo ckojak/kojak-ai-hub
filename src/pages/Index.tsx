@@ -163,7 +163,7 @@ const Index = () => {
     try {
       const config = modeConfig[mode] || modeConfig.chat;
       const personalContext = profile?.personal_context || "";
-      const recentHistory = baseMessages.slice(-10).map((m) => ({ role: m.role, content: m.content }));
+      const recentHistory = baseMessages.slice(-20).map((m) => ({ role: m.role, content: m.content }));
 
       const payload = {
         prompt: content,

@@ -46,8 +46,15 @@ serve(async (req) => {
 
     if (!transcript && audio) {
       const bin = Uint8Array.from(atob(String(audio)), (c) => c.charCodeAt(0));
+      const type = String(mimeType || "audio/webm");
+      const extMap: Record<string, string> = {
+        "audio/webm": "webm", "audio/ogg": "ogg", "audio/mpeg": "mp3", "audio/mp3": "mp3",
+        "audio/mp4": "m4a", "audio/x-m4a": "m4a", "audio/m4a": "m4a", "audio/wav": "wav",
+        "audio/x-wav": "wav", "audio/wave": "wav", "audio/flac": "flac", "audio/aac": "aac",
+      };
+      const ext = extMap[type.split(";")[0].trim()] || "webm";
       const form = new FormData();
-      form.append("file", new Blob([bin], { type: mimeType || "audio/webm" }), "audio.webm");
+      form.append("file", new Blob([bin], { type }), `audio.${ext}`);
       form.append("model", STT_MODEL);
       form.append("language", lang);
       form.append("temperature", "0");

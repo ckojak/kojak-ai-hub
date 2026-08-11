@@ -43,7 +43,7 @@ const TIERS: Record<Tier, TierConfig> = {
   avancado: {
     model: "openai/gpt-oss-120b",
     temperature: 0.5,
-    max_tokens: 4096,
+    max_tokens: 2500,
     reasoning_effort: "medium",
     thinking:
       "Modo Avançado: antes de responder, verifique premissas, considere ao menos duas abordagens e escolha a melhor justificando em uma linha. Seja preciso com números, nomes e trade-offs. Diga explicitamente quando algo for incerto.",
@@ -51,7 +51,7 @@ const TIERS: Record<Tier, TierConfig> = {
   raciocinio: {
     model: "openai/gpt-oss-120b",
     temperature: 0.35,
-    max_tokens: 8192,
+    max_tokens: 3500,
     reasoning_effort: "high",
     thinking:
       "Modo Raciocínio: pense passo a passo internamente antes de responder. Decomponha o problema, valide cada etapa, cheque cálculos e casos-limite, e só então entregue a resposta final — limpa e organizada, sem expor o rascunho do raciocínio. Se a pergunta for ambígua, declare a interpretação adotada em uma linha antes de responder. Nunca invente fatos: se não souber, diga.",

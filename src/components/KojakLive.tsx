@@ -407,7 +407,10 @@ export function KojakLive({ onClose }: KojakLiveProps) {
         </div>
       </div>
 
-      <div className="flex items-center justify-center gap-4 p-8 pb-12">
+      <div
+        className="flex items-center justify-center gap-4 p-8"
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 3rem)" }}
+      >
         <button
           onClick={() => setMuted((v) => !v)}
           className={cn(

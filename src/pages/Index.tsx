@@ -122,7 +122,7 @@ const Index = () => {
     return full;
   }, []);
 
-  const handleSendMessage = useCallback(async (content: string, mode: string, imageUrl?: string) => {
+  const handleSendMessage = useCallback(async (content: string, mode: string, imageUrl?: string, options?: { webSearch?: boolean }) => {
     if (!content.trim() && !imageUrl && !referenceImage) return;
 
     let chatId = currentChat?.id;
@@ -136,7 +136,7 @@ const Index = () => {
         }
         chatId = newChat.id;
       }
-      await addMessage("user", content, imageUrl ? "image" : "text", imageUrl);
+      await addMessage("user", content, imageUrl ? "image" : "text", imageUrl, chatId);
       await logActivity(`Mensagem enviada no modo ${mode}`, { preview: content.slice(0, 100) });
     } else {
       if (localMessages.length === 0) {
@@ -175,6 +175,7 @@ const Index = () => {
       language,
       userId: user?.id ?? null,
       chatId: chatId ?? null,
+      webSearch: !!options?.webSearch,
       };
 
       if (config.streams) {
@@ -185,7 +186,7 @@ const Index = () => {
         const responseType = matches.length > 0 ? "code" : "text";
 
         if (user && chatId) {
-          await addMessage("assistant", fullText, responseType);
+          await addMessage("assistant", fullText, responseType, undefined, chatId);
           if (dbMessages.length === 0) {
             const title = content ? content.slice(0, 50) + (content.length > 50 ? "..." : "") : "Nova Conversa";
             await updateChatTitle(chatId, title);
@@ -209,7 +210,7 @@ const Index = () => {
         if (data.error) throw new Error(data.error);
 
         if (user && chatId) {
-          await addMessage("assistant", data.content, data.type || "text", data.mediaUrl);
+          await addMessage("assistant", data.content, data.type || "text", data.mediaUrl, chatId);
           if (dbMessages.length === 0) {
             const title = content ? content.slice(0, 50) + (content.length > 50 ? "..." : "") : "Imagem Enviada";
             await updateChatTitle(chatId, title);
@@ -230,8 +231,9 @@ const Index = () => {
       console.error("Erro ao enviar mensagem:", error);
       const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
       const requiresLogin = error instanceof Error && (error as any).requiresLogin;
+      const upgradeRequired = error instanceof Error && (error as any).upgradeRequired;
 
-      toast({ title: requiresLogin ? "Faça login para continuar" : "Erro", description: errorMessage, variant: "destructive" });
+      toast({ title: upgradeRequired ? t("limitReachedTitle") : requiresLogin ? "Faça login para continuar" : "Erro", description: errorMessage, variant: "destructive" });
       setStreamingContent("");
 
       if (requiresLogin) {
@@ -247,14 +249,14 @@ const Index = () => {
         created_at: new Date().toISOString(),
       };
       if (user && chatId) {
-        await addMessage("assistant", errorAssistantMessage.content, "text");
+        await addMessage("assistant", errorAssistantMessage.content, "text", undefined, chatId);
       } else {
         setLocalMessages(prev => [...prev, errorAssistantMessage]);
       }
     } finally {
       setIsLoading(false);
     }
-  }, [user, currentChat, createChat, addMessage, updateChatTitle, dbMessages, profile, toast, logActivity, referenceImage, localMessages.length, baseMessages, streamFromFunction, aiTier, language, navigate]);
+  }, [user, currentChat, createChat, addMessage, updateChatTitle, dbMessages, profile, toast, logActivity, referenceImage, localMessages.length, baseMessages, streamFromFunction, aiTier, language, navigate, t]);
 
   const handleNewChat = useCallback(async () => {
     if (user) await createChat(activeMode);

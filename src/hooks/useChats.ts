@@ -115,20 +115,23 @@ export function useChats() {
     }
   }, [currentChat]);
 
-  // Add a message to current chat
+  // Add a message to a chat. `chatId` explícito evita o bug de closure
+  // desatualizada logo após createChat (primeira mensagem sumindo/duplicando).
   const addMessage = useCallback(
     async (
       role: "user" | "assistant",
       content: string,
       type: "text" | "code" | "image" | "video" = "text",
-      mediaUrl?: string
+      mediaUrl?: string,
+      chatId?: string
     ) => {
-      if (!currentChat) return null;
+      const targetId = chatId || currentChat?.id;
+      if (!targetId) return null;
 
       const { data, error } = await supabase
         .from("messages")
         .insert({
-          chat_id: currentChat.id,
+          chat_id: targetId,
           role,
           content,
           type,
@@ -138,13 +141,15 @@ export function useChats() {
         .single();
 
       if (!error && data) {
-        setMessages((prev) => [...prev, data as Message]);
+        setMessages((prev) =>
+          prev.some((m) => m.id === (data as Message).id) ? prev : [...prev, data as Message]
+        );
 
         // Update chat's updated_at
         await supabase
           .from("chats")
           .update({ updated_at: new Date().toISOString() })
-          .eq("id", currentChat.id);
+          .eq("id", targetId);
 
         return data;
       }

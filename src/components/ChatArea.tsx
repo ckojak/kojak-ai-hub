@@ -13,7 +13,7 @@ interface ChatAreaProps {
   isLoading: boolean;
   activeMode: string;
   onModeChange: (mode: string) => void;
-  onSendMessage: (content: string, mode: string, imageUrl?: string) => void;
+  onSendMessage: (content: string, mode: string, imageUrl?: string, options?: { webSearch?: boolean }) => void;
   voiceTranscript?: string;
   isListening?: boolean;
   isSpeaking?: boolean;

@@ -34,7 +34,7 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { audio, mimeType, text, history, context, language, tier } = body || {};
+    const { audio, mimeType, text, history, context, language, tier, transcribeOnly } = body || {};
 
     const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
     if (!GROQ_API_KEY) return missingKeyResponse();
@@ -46,8 +46,15 @@ serve(async (req) => {
 
     if (!transcript && audio) {
       const bin = Uint8Array.from(atob(String(audio)), (c) => c.charCodeAt(0));
+      const type = String(mimeType || "audio/webm");
+      const extMap: Record<string, string> = {
+        "audio/webm": "webm", "audio/ogg": "ogg", "audio/mpeg": "mp3", "audio/mp3": "mp3",
+        "audio/mp4": "m4a", "audio/x-m4a": "m4a", "audio/m4a": "m4a", "audio/wav": "wav",
+        "audio/x-wav": "wav", "audio/wave": "wav", "audio/flac": "flac", "audio/aac": "aac",
+      };
+      const ext = extMap[type.split(";")[0].trim()] || "webm";
       const form = new FormData();
-      form.append("file", new Blob([bin], { type: mimeType || "audio/webm" }), "audio.webm");
+      form.append("file", new Blob([bin], { type }), `audio.${ext}`);
       form.append("model", STT_MODEL);
       form.append("language", lang);
       form.append("temperature", "0");
@@ -64,6 +71,15 @@ serve(async (req) => {
       const sttData = await sttRes.json();
       transcript = String(sttData.text || "").trim();
     }
+
+    // Modo "só transcrever" — usado pelo anexo de áudio no chat de texto.
+    if (transcribeOnly) {
+      return new Response(JSON.stringify({ transcript }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+
 
     // Filtra ruído: transcrições muito curtas ou alucinações comuns do Whisper em silêncio
     const noise = /^[\s.,!?…-]*$/.test(transcript) ||

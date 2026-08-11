@@ -9,6 +9,8 @@ import {
   resolveTier,
   sseResponse,
 } from "../_shared/groq.ts";
+import { callGeminiFallback, geminiErrorResponse, geminiStreamToOpenAISSE } from "../_shared/gemini.ts";
+import { retrieveRelevantMemories, extractMemories } from "./memoryService.ts";
 
 const SYSTEM_PROMPT = `Você é a Kojak IA — uma inteligência artificial de alto nível, parceira de raciocínio do usuário: analítica, didática e humana.
 
@@ -34,7 +36,19 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { prompt, image, reference_image, history, context, mode, tier, language, stream = true } = body || {};
+    const {
+      prompt,
+      image,
+      reference_image,
+      history,
+      context,
+      mode,
+      tier,
+      language,
+      stream = true,
+      userId,
+      chatId,
+    } = body || {};
 
     if (!prompt && !image) return jsonError("Prompt é obrigatório");
 
@@ -53,15 +67,56 @@ serve(async (req) => {
       referenceImage: reference_image,
     });
 
+    // Injeta memórias relevantes sobre o usuário no system prompt (funciona
+    // tanto pro caminho Groq quanto pro fallback Gemini, pois messages[0] é
+    // compartilhado entre os dois).
+    if (userId && prompt) {
+      const memoryContext = await retrieveRelevantMemories(prompt, userId, 5);
+      if (memoryContext) {
+        messages[0].content += memoryContext;
+      }
+    }
+
     const hasImage = !!(image || reference_image);
-    const response = await callGroq({ apiKey: GROQ_API_KEY, tier: resolved, messages, stream: !!stream, hasImage });
 
-    if (!response.ok) return await groqErrorResponse(response, "Kojak Code Groq");
+    let response = await callGroq({ apiKey: GROQ_API_KEY, tier: resolved, messages, stream: !!stream, hasImage });
+    let usedGemini = false;
 
-    if (stream && response.body) return sseResponse(response.body);
+    if (!response.ok && [429, 402, 500, 502, 503, 504].includes(response.status)) {
+      const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+      if (GEMINI_API_KEY) {
+        console.warn(`Groq falhou (${response.status}), caindo pro fallback Gemini...`);
+        usedGemini = true;
+        response = await callGeminiFallback(resolved, messages, GEMINI_API_KEY, !!stream);
+      }
+    }
+
+    if (!response.ok) {
+      return usedGemini
+        ? await geminiErrorResponse(response, "Kojak Code Gemini fallback")
+        : await groqErrorResponse(response, "Kojak Code Groq");
+    }
+
+    // Extrai memórias novas dessa troca, sem travar a resposta.
+    if (userId && chatId && prompt) {
+      const messagesForExtraction = [
+        ...(Array.isArray(history) ? history : []),
+        { role: "user", content: prompt },
+      ];
+      extractMemories(messagesForExtraction, userId, chatId).catch((e) =>
+        console.error("Erro ao extrair memórias:", e)
+      );
+    }
+
+    if (stream && response.body) {
+      return usedGemini ? sseResponse(geminiStreamToOpenAISSE(response.body)) : sseResponse(response.body);
+    }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || "Desculpe, não consegui processar sua solicitação.";
+    const content = usedGemini
+      ? (data.candidates?.[0]?.content?.parts?.map((p: any) => p.text || "").join("") ||
+          "Desculpe, não consegui processar sua solicitação.")
+      : (data.choices?.[0]?.message?.content || "Desculpe, não consegui processar sua solicitação.");
     const hasCode = /```[\w]*\n[\s\S]*?```/.test(content);
 
     return new Response(

@@ -173,6 +173,9 @@ export async function groqErrorResponse(response: Response, prefix: string) {
   return jsonError(`Erro na IA: ${response.status} ${errText.slice(0, 300)}`);
 }
 
+/** Modelo agente da Groq com busca na web nativa. */
+export const WEB_SEARCH_MODEL = "groq/compound";
+
 /** Chama a Groq chat.completions com a configuração do tier escolhido. */
 export async function callGroq(opts: {
   apiKey: string;
@@ -180,9 +183,14 @@ export async function callGroq(opts: {
   messages: any[];
   stream: boolean;
   hasImage?: boolean;
+  webSearch?: boolean;
 }) {
   const cfg = TIERS[opts.tier];
-  const model = opts.hasImage ? VISION_MODEL : cfg.model;
+  const model = opts.webSearch
+    ? WEB_SEARCH_MODEL
+    : opts.hasImage
+      ? VISION_MODEL
+      : cfg.model;
 
   const payload: Record<string, unknown> = {
     model,
@@ -193,8 +201,8 @@ export async function callGroq(opts: {
     stream: opts.stream,
   };
 
-  // reasoning_effort só é aceito pelos modelos gpt-oss (e sem imagem).
-  if (cfg.reasoning_effort && model.startsWith("openai/gpt-oss")) {
+  // reasoning_effort só é aceito pelos modelos gpt-oss (e sem imagem/web).
+  if (!opts.webSearch && cfg.reasoning_effort && model.startsWith("openai/gpt-oss")) {
     payload.reasoning_effort = cfg.reasoning_effort;
     payload.reasoning_format = "hidden";
   }

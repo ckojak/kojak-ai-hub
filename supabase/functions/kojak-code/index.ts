@@ -90,6 +90,12 @@ serve(async (req) => {
     let response = await callGroq({ apiKey: GROQ_API_KEY, tier: resolved, messages, stream: !!stream, hasImage, webSearch: useWeb });
     let usedGemini = false;
 
+    // Se o modelo agente (busca na web) recusar a requisição, refaz sem web search.
+    if (!response.ok && useWeb) {
+      console.warn("Web search indisponível, refazendo sem busca:", response.status);
+      response = await callGroq({ apiKey: GROQ_API_KEY, tier: resolved, messages, stream: !!stream, hasImage });
+    }
+
     if (!response.ok && [429, 402, 500, 502, 503, 504].includes(response.status)) {
       const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
       if (GEMINI_API_KEY) {

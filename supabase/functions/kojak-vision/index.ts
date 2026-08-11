@@ -2,6 +2,18 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 import { corsHeaders, GEMINI_BASE, urlToInlineData } from "../_shared/gemini.ts";
 
+const TIMEOUT_MS = 45_000;
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -73,17 +85,34 @@ serve(async (req) => {
       }
     }
 
-    const response = await fetch(
-      `${GEMINI_BASE}/gemini-3.1-flash-image:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts }],
-          generationConfig: { responseModalities: ["IMAGE", "TEXT"] },
-        }),
-      },
-    );
+    async function callVision() {
+      return fetchWithTimeout(
+        `${GEMINI_BASE}/gemini-3.1-flash-image:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts }],
+            generationConfig: { responseModalities: ["IMAGE", "TEXT"] },
+          }),
+        },
+        TIMEOUT_MS,
+      );
+    }
+
+    let response: Response;
+    try {
+      response = await callVision();
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        console.error("Kojak Vision timeout após", TIMEOUT_MS, "ms");
+        return new Response(
+          JSON.stringify({ error: "A geração de imagem demorou demais e foi cancelada. Tente novamente ou simplifique o pedido." }),
+          { status: 504, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      throw err;
+    }
 
     if (!response.ok) {
       const errText = await response.text().catch(() => "");

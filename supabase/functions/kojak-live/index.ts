@@ -34,7 +34,7 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { audio, mimeType, text, history, context, language, tier } = body || {};
+    const { audio, mimeType, text, history, context, language, tier, transcribeOnly } = body || {};
 
     const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
     if (!GROQ_API_KEY) return missingKeyResponse();

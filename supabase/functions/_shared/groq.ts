@@ -194,10 +194,19 @@ export async function callGroq(opts: {
 
   // O modelo agente (web search) tem orçamento de tokens menor: encurta o
   // histórico e o teto de saída pra não estourar (413).
+  // O modelo agente tem orçamento de tokens bem menor: usa um system curto,
+  // só as últimas trocas e conteúdo truncado.
   const messages = opts.webSearch
-    ? [opts.messages[0], ...opts.messages.slice(-5)].map((m: any) =>
-        typeof m.content === "string" ? { ...m, content: m.content.slice(0, 4000) } : m,
-      )
+    ? [
+        {
+          role: "system",
+          content:
+            "Você é a Kojak IA. Busque na web quando precisar de dados atuais e responda curto (até 4 frases), em português do Brasil, citando a fonte quando relevante.",
+        },
+        ...opts.messages.slice(-3).map((m: any) =>
+          typeof m.content === "string" ? { ...m, content: m.content.slice(0, 1500) } : m,
+        ),
+      ]
     : opts.messages;
 
   const payload: Record<string, unknown> = {

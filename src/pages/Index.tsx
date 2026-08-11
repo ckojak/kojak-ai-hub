@@ -165,15 +165,16 @@ const Index = () => {
       const personalContext = profile?.personal_context || "";
       const recentHistory = baseMessages.slice(-20).map((m) => ({ role: m.role, content: m.content }));
 
-      const payload = {
-        prompt: content,
-        context: personalContext,
-        history: recentHistory,
-        image: imageUrl,
-        reference_image: referenceImage,
-        tier: aiTier,
-        language,
-        userId: user?.id ?? null,
+        const payload = {
+      prompt: content,
+      context: personalContext,
+      history: recentHistory,
+      image: imageUrl,
+      reference_image: referenceImage,
+      tier: aiTier,
+      language,
+      userId: user?.id ?? null,
+      chatId: chatId ?? null,
       };
 
       if (config.streams) {

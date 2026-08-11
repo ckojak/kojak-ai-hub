@@ -48,12 +48,19 @@ export function KojakLive({ onClose }: KojakLiveProps) {
   const sensitivityRef = useRef(3);
   const historyRef = useRef<{ role: "user" | "assistant"; content: string }[]>([]);
   const closedRef = useRef(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => { mutedRef.current = muted; }, [muted]);
   useEffect(() => { sensitivityRef.current = sensitivity; }, [sensitivity]);
 
-  const speakReply = useCallback((text: string) => {
-    if (!text || !("speechSynthesis" in window)) return;
+  const finishSpeaking = useCallback(() => {
+    busyRef.current = false;
+    if (!closedRef.current) setStatus("listening");
+  }, []);
+
+  /** Fallback: voz nativa do navegador (só se a voz neural falhar). */
+  const speakBrowserFallback = useCallback((text: string) => {
+    if (!text || !("speechSynthesis" in window)) { finishSpeaking(); return; }
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = LOCALE_MAP[language] || "pt-BR";
@@ -66,11 +73,44 @@ export function KojakLive({ onClose }: KojakLiveProps) {
     ) || voices.find((v) => v.lang.startsWith(u.lang.slice(0, 2)));
     if (preferred) u.voice = preferred;
 
-    setStatus("speaking");
-    u.onend = () => { busyRef.current = false; if (!closedRef.current) setStatus("listening"); };
-    u.onerror = () => { busyRef.current = false; if (!closedRef.current) setStatus("listening"); };
+    u.onend = finishSpeaking;
+    u.onerror = finishSpeaking;
     window.speechSynthesis.speak(u);
-  }, [language]);
+  }, [language, finishSpeaking]);
+
+  /** Voz neural Kore (Gemini TTS) via edge function, com fallback nativo. */
+  const speakReply = useCallback(async (text: string) => {
+    const clean = text
+      .replace(/```[\s\S]*?```/g, " ")
+      .replace(/`[^`]+`/g, "")
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      .replace(/[#*_~]/g, "")
+      .replace(/\n+/g, " ")
+      .trim();
+    if (!clean) { finishSpeaking(); return; }
+
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    window.speechSynthesis?.cancel();
+    setStatus("speaking");
+
+    try {
+      const { data, error } = await supabase.functions.invoke("kojak-voice", {
+        body: { text: clean, voice: "Kore" },
+      });
+      if (closedRef.current) return;
+      if (error || !data?.audio) throw new Error(error?.message || "sem áudio");
+
+      const audio = new Audio(data.audio);
+      audioRef.current = audio;
+      audio.onended = finishSpeaking;
+      audio.onerror = () => speakBrowserFallback(clean);
+      await audio.play().catch(() => speakBrowserFallback(clean));
+    } catch (err) {
+      console.error("Kojak Live voz neural indisponível:", err);
+      if (!closedRef.current) speakBrowserFallback(clean);
+    }
+  }, [finishSpeaking, speakBrowserFallback]);
+
 
   const sendUtterance = useCallback(async (blob: Blob) => {
     if (closedRef.current) return;
@@ -132,6 +172,7 @@ export function KojakLive({ onClose }: KojakLiveProps) {
     streamRef.current = null;
     audioCtxRef.current?.close().catch(() => undefined);
     audioCtxRef.current = null;
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
     window.speechSynthesis?.cancel();
   }, []);
 
@@ -366,7 +407,10 @@ export function KojakLive({ onClose }: KojakLiveProps) {
         </div>
       </div>
 
-      <div className="flex items-center justify-center gap-4 p-8 pb-12">
+      <div
+        className="flex items-center justify-center gap-4 p-8"
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 3rem)" }}
+      >
         <button
           onClick={() => setMuted((v) => !v)}
           className={cn(

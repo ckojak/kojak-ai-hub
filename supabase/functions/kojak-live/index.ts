@@ -65,6 +65,15 @@ serve(async (req) => {
       transcript = String(sttData.text || "").trim();
     }
 
+    // Modo "só transcrever" — usado pelo anexo de áudio no chat de texto.
+    if (transcribeOnly) {
+      return new Response(JSON.stringify({ transcript }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+
+
     // Filtra ruído: transcrições muito curtas ou alucinações comuns do Whisper em silêncio
     const noise = /^[\s.,!?…-]*$/.test(transcript) ||
       transcript.length < 2 ||

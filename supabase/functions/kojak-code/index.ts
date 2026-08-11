@@ -1,129 +1,122 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import {
   corsHeaders,
-  languageInstruction,
-} from "../_shared/gemini.ts";
+  buildMessages,
+  callGroq,
+  groqErrorResponse,
+  jsonError,
+  missingKeyResponse,
+  resolveTier,
+  sseResponse,
+} from "../_shared/groq.ts";
+import { callGeminiFallback, geminiErrorResponse, geminiStreamToOpenAISSE } from "../_shared/gemini.ts";
+import { retrieveRelevantMemories, extractMemories } from "./memoryService.ts";
 
-const FAST_MODEL = "llama-3.1-8b-instant";
-const THINKING_MODEL = "llama-3.3-70b-versatile";
+const SYSTEM_PROMPT = `Você é a Kojak IA — uma inteligência artificial de alto nível, parceira de raciocínio do usuário: analítica, didática e humana.
 
-/** Aceita mode: "fast" | "thinking" ou tier: "rapido" | "raciocinio". */
-function pickModel(mode?: string, tier?: string) {
-  const v = String(mode || tier || "").toLowerCase();
-  return ["thinking", "raciocinio", "pro", "avancado"].includes(v) ? THINKING_MODEL : FAST_MODEL;
-}
+## QUEM VOCÊ É
+Especialista generalista com profundidade real em engenharia de software, produto, negócios, ciência e tecnologia. Você pensa como um sênior: enxerga o problema por trás do pedido, antecipa o próximo obstáculo e entrega a solução, não só a informação.
 
-const SYSTEM_PROMPT = `Você é Kojak IA — um parceiro de conversa inteligente, didático e humano.
-
-## COMO VOCÊ CONVERSA
-- **Curto por padrão.** Responda em 1-3 frases ou uma lista pequena. Nada de textões.
-- **Vá direto ao ponto.** Sem "Claro!", "Ótima pergunta!", "Espero ter ajudado".
-- **Didático, não catedrático.** Explique como um amigo especialista: exemplo rápido > teoria longa.
-- **Dialogue de verdade.** Termine com uma pergunta curta ou próximo passo quando fizer sentido — mantenha a conversa fluindo, sem forçar.
-- **Detalhe sob demanda.** Só solte respostas longas se o usuário pedir ("me explica em detalhes", "passo a passo", "aprofunda").
-- **Formatação enxuta.** Bullets curtos, negrito só no essencial. Nada de headings gigantes em resposta simples.
+## COMO VOCÊ RESPONDE
+- **Curto por padrão, profundo sob demanda.** 1-4 frases ou bullets enxutos. Só alongue se pedirem ("detalha", "passo a passo", "aprofunda") ou se o tema exigir.
+- **Didático, não catedrático.** Explique como um amigo especialista: analogia certeira + exemplo concreto.
+- **Antecipe.** Se a solução tem uma pegadinha comum, avise em uma linha.
+- **Dialogue.** Termine com uma pergunta curta ou próximo passo quando fizer sentido.
 
 ## CÓDIGO
-- Sempre em bloco com linguagem: \`\`\`ts, \`\`\`python, etc.
-- Comente só o que não é óbvio. Prefira código pronto para colar.
-
-## IDIOMA
-Português do Brasil, exceto se o usuário mudar.
-
-## MEMÓRIA
-Use o histórico da conversa para não repetir explicações já dadas.
+- Sempre em bloco com a linguagem declarada: \`\`\`ts, \`\`\`python, etc.
+- Código pronto para colar e rodar. Sem placeholders vagos.
+- Comente só o que não é óbvio. Aponte o erro real quando estiver debugando, não sintomas.
 
 ## LIMITE RÍGIDO
-Nunca crie, estruture ou desenvolva cursos, módulos de ensino ou currículos. Recuse educadamente e ofereça outra forma de ajudar.
-`;
+Nunca crie, estruture ou desenvolva cursos, módulos de ensino, aulas ou currículos. Recuse educadamente e ofereça outra forma de ajudar.`;
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { prompt, image, history, context, mode, tier, language, stream = true } = body || {};
-    const MODEL = pickModel(mode, tier);
+    const {
+      prompt,
+      image,
+      reference_image,
+      history,
+      context,
+      mode,
+      tier,
+      language,
+      stream = true,
+      userId,
+      chatId,
+    } = body || {};
 
-    if (!prompt && !image) {
-      return new Response(
-        JSON.stringify({ error: "Prompt é obrigatório" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
+    if (!prompt && !image) return jsonError("Prompt é obrigatório");
 
     const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
-    if (!GROQ_API_KEY) {
-      return new Response(
-        JSON.stringify({ error: "GROQ_API_KEY não está configurada" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
+    if (!GROQ_API_KEY) return missingKeyResponse();
 
-    const systemContent = (context && typeof context === "string" && context.trim()
-      ? `${SYSTEM_PROMPT}\n\n## CONTEXTO DO USUÁRIO\n${context.trim()}`
-      : SYSTEM_PROMPT) + languageInstruction(language);
+    const resolved = resolveTier(tier, mode);
+    const messages = buildMessages({
+      systemPrompt: SYSTEM_PROMPT,
+      context,
+      language,
+      tier: resolved,
+      history,
+      prompt,
+      image,
+      referenceImage: reference_image,
+    });
 
-    const messages: any[] = [
-      { role: "system", content: systemContent }
-    ];
-
-    if (Array.isArray(history)) {
-      for (const m of history.slice(-15)) {
-        if (m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string") {
-          messages.push({ role: m.role, content: m.content });
-        }
+    // Injeta memórias relevantes sobre o usuário no system prompt (funciona
+    // tanto pro caminho Groq quanto pro fallback Gemini, pois messages[0] é
+    // compartilhado entre os dois).
+    if (userId && prompt) {
+      const memoryContext = await retrieveRelevantMemories(prompt, userId, 5);
+      if (memoryContext) {
+        messages[0].content += memoryContext;
       }
     }
 
-    if (image) {
-      messages.push({
-        role: "user",
-        content: prompt || "Analise esta imagem.",
-      });
-    } else {
-      messages.push({ role: "user", content: prompt });
+    const hasImage = !!(image || reference_image);
+
+    let response = await callGroq({ apiKey: GROQ_API_KEY, tier: resolved, messages, stream: !!stream, hasImage });
+    let usedGemini = false;
+
+    if (!response.ok && [429, 402, 500, 502, 503, 504].includes(response.status)) {
+      const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+      if (GEMINI_API_KEY) {
+        console.warn(`Groq falhou (${response.status}), caindo pro fallback Gemini...`);
+        usedGemini = true;
+        response = await callGeminiFallback(resolved, messages, GEMINI_API_KEY, !!stream);
+      }
     }
 
-    const payload = {
-      model: MODEL,
-      messages: messages,
-      temperature: 0.7,
-      stream: stream,
-    };
-
-    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${GROQ_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-
     if (!response.ok) {
-      const errText = await response.text();
-      return new Response(
-        JSON.stringify({ error: `Erro na API Groq: ${response.status} - ${errText}` }),
-        { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      return usedGemini
+        ? await geminiErrorResponse(response, "Kojak Code Gemini fallback")
+        : await groqErrorResponse(response, "Kojak Code Groq");
+    }
+
+    // Extrai memórias novas dessa troca, sem travar a resposta.
+    if (userId && chatId && prompt) {
+      const messagesForExtraction = [
+        ...(Array.isArray(history) ? history : []),
+        { role: "user", content: prompt },
+      ];
+      extractMemories(messagesForExtraction, userId, chatId).catch((e) =>
+        console.error("Erro ao extrair memórias:", e)
       );
     }
 
     if (stream && response.body) {
-      return new Response(response.body, {
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          Connection: "keep-alive",
-        },
-      });
+      return usedGemini ? sseResponse(geminiStreamToOpenAISSE(response.body)) : sseResponse(response.body);
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || "Desculpe, não consegui processar sua solicitação.";
+    const content = usedGemini
+      ? (data.candidates?.[0]?.content?.parts?.map((p: any) => p.text || "").join("") ||
+          "Desculpe, não consegui processar sua solicitação.")
+      : (data.choices?.[0]?.message?.content || "Desculpe, não consegui processar sua solicitação.");
     const hasCode = /```[\w]*\n[\s\S]*?```/.test(content);
 
     return new Response(
@@ -137,10 +130,7 @@ serve(async (req) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
-    console.error("Kojak Groq error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Erro desconhecido no processamento" }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    console.error("Kojak Code error:", error);
+    return jsonError(error instanceof Error ? error.message : "Erro desconhecido no processamento");
   }
 });

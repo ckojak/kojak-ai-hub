@@ -162,3 +162,64 @@ export function languageInstruction(language?: string): string {
   const name = LANGUAGE_NAMES[lang] || LANGUAGE_NAMES.pt;
   return `\n\n## IDIOMA OBRIGATÓRIO\nResponda SEMPRE em ${name}, independente do idioma em que o usuário escreveu, a menos que ele peça explicitamente outro idioma.`;
 }
+const GEMINI_FALLBACK_MODEL: Record<string, string> = {
+  basico: "gemini-3.5-flash-lite",
+  rapido: "gemini-3.6-flash",
+  avancado: "gemini-3.1-pro-preview",
+  raciocinio: "gemini-3.1-pro-preview",
+};
+
+const GEMINI_FALLBACK_MAXTOKENS: Record<string, number> = {
+  basico: 1024,
+  rapido: 2048,
+  avancado: 3000,
+  raciocinio: 4000,
+};
+
+const GEMINI_FALLBACK_TEMP: Record<string, number> = {
+  basico: 0.4,
+  rapido: 0.5,
+  avancado: 0.55,
+  raciocinio: 0.55,
+};
+
+const GEMINI_FALLBACK_THINKING: Record<string, number> = {
+  avancado: 2048,
+  raciocinio: 6144,
+};
+
+/**
+ * Fallback transparente pra Gemini quando a Groq falha (429/402/5xx).
+ * Reaproveita o array `messages` no formato OpenAI (o mesmo usado pra Groq):
+ * messages[0] é o system prompt, o resto é o histórico + turno atual.
+ */
+export async function callGeminiFallback(
+  tier: string,
+  messages: { role: string; content: any }[],
+  apiKey: string,
+  stream: boolean,
+) {
+  const systemText = typeof messages[0]?.content === "string" ? messages[0].content : "";
+  const contents = toGeminiContents(messages.slice(1));
+
+  const model = GEMINI_FALLBACK_MODEL[tier] || GEMINI_FALLBACK_MODEL.rapido;
+  const maxOutputTokens = GEMINI_FALLBACK_MAXTOKENS[tier] || 2048;
+  const temperature = GEMINI_FALLBACK_TEMP[tier] || 0.5;
+  const thinkingBudget = GEMINI_FALLBACK_THINKING[tier];
+
+  const generationConfig: any = { temperature, topP: 0.95, maxOutputTokens };
+  if (thinkingBudget) generationConfig.thinkingConfig = { thinkingBudget };
+
+  const method = stream ? "streamGenerateContent" : "generateContent";
+  const url = `${GEMINI_BASE}/${model}:${method}?key=${apiKey}${stream ? "&alt=sse" : ""}`;
+
+  return fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents,
+      systemInstruction: { parts: [{ text: systemText }] },
+      generationConfig,
+    }),
+  });
+}

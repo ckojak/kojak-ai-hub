@@ -1,281 +1,386 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { X, Mic, MicOff, PhoneOff } from "lucide-react";
+import { X, Mic, MicOff, PhoneOff, Loader2, Volume2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useLanguage, LOCALE_MAP } from "@/hooks/useLanguage";
 import { useToast } from "@/hooks/use-toast";
 import { KOJAK_LOGO_BASE64 } from "@/assets/kojak-logo";
+import { cn } from "@/lib/utils";
 
 interface KojakLiveProps {
   onClose: () => void;
 }
 
-// Converte Float32 (formato do microfone do navegador) pra Int16 PCM (formato que a Gemini espera)
-function floatTo16BitPCM(float32: Float32Array): ArrayBuffer {
-  const buffer = new ArrayBuffer(float32.length * 2);
-  const view = new DataView(buffer);
-  for (let i = 0; i < float32.length; i++) {
-    const s = Math.max(-1, Math.min(1, float32[i]));
-    view.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
-  }
-  return buffer;
-}
+type LiveStatus = "connecting" | "listening" | "capturing" | "thinking" | "speaking" | "error";
 
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  let binary = "";
-  const bytes = new Uint8Array(buffer);
-  for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-  return btoa(binary);
-}
-
-function base64ToArrayBuffer(base64: string): ArrayBuffer {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes.buffer;
-}
+/** Silêncio necessário (ms) para considerar que a pessoa terminou de falar. */
+const SILENCE_MS = 900;
+/** Duração mínima (ms) de fala para valer o envio — corta tosse, clique, "ãh". */
+const MIN_SPEECH_MS = 400;
+/** Duração máxima de um turno. */
+const MAX_SPEECH_MS = 20000;
 
 export function KojakLive({ onClose }: KojakLiveProps) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const { language, t } = useLanguage();
   const { toast } = useToast();
 
-  const [status, setStatus] = useState<"connecting" | "listening" | "speaking" | "error">("connecting");
+  const [status, setStatus] = useState<LiveStatus>("connecting");
   const [muted, setMuted] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [level, setLevel] = useState(0);
+  /** Sensibilidade: quanto maior, mais perto a pessoa precisa estar. */
+  const [sensitivity, setSensitivity] = useState(3);
+  const [lastUser, setLastUser] = useState("");
+  const [lastReply, setLastReply] = useState("");
 
-  const wsRef = useRef<WebSocket | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const micStreamRef = useRef<MediaStream | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const speakingSinceRef = useRef<number | null>(null);
+  const silenceSinceRef = useRef<number | null>(null);
+  const noiseFloorRef = useRef(0.01);
+  const busyRef = useRef(false);
   const mutedRef = useRef(false);
+  const sensitivityRef = useRef(3);
+  const historyRef = useRef<{ role: "user" | "assistant"; content: string }[]>([]);
+  const closedRef = useRef(false);
 
-  // Fila de reprodução do áudio que a Gemini manda de volta
-  const playbackQueueRef = useRef<AudioBuffer[]>([]);
-  const isPlayingRef = useRef(false);
-  const playbackContextRef = useRef<AudioContext | null>(null);
+  useEffect(() => { mutedRef.current = muted; }, [muted]);
+  useEffect(() => { sensitivityRef.current = sensitivity; }, [sensitivity]);
 
-  const playNextChunk = useCallback(() => {
-    if (isPlayingRef.current || playbackQueueRef.current.length === 0) return;
-    const ctx = playbackContextRef.current;
-    if (!ctx) return;
+  const speakReply = useCallback((text: string) => {
+    if (!text || !("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = LOCALE_MAP[language] || "pt-BR";
+    u.rate = 1.02;
+    u.pitch = 1.0;
+    const voices = window.speechSynthesis.getVoices();
+    const preferred = voices.find(
+      (v) => v.lang.startsWith(u.lang.slice(0, 2)) &&
+        /female|feminina|luciana|francisca|google/i.test(v.name),
+    ) || voices.find((v) => v.lang.startsWith(u.lang.slice(0, 2)));
+    if (preferred) u.voice = preferred;
 
-    isPlayingRef.current = true;
     setStatus("speaking");
-    const buffer = playbackQueueRef.current.shift()!;
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-    source.connect(ctx.destination);
-    source.onended = () => {
-      isPlayingRef.current = false;
-      if (playbackQueueRef.current.length > 0) {
-        playNextChunk();
-      } else {
-        setStatus("listening");
+    u.onend = () => { busyRef.current = false; if (!closedRef.current) setStatus("listening"); };
+    u.onerror = () => { busyRef.current = false; if (!closedRef.current) setStatus("listening"); };
+    window.speechSynthesis.speak(u);
+  }, [language]);
+
+  const sendUtterance = useCallback(async (blob: Blob) => {
+    if (closedRef.current) return;
+    setStatus("thinking");
+
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(String(reader.result).split(",")[1] || "");
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+
+      const { data, error } = await supabase.functions.invoke("kojak-live", {
+        body: {
+          audio: base64,
+          mimeType: blob.type || "audio/webm",
+          history: historyRef.current.slice(-12),
+          context: profile?.personal_context || "",
+          language,
+          tier: "rapido",
+        },
+      });
+
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+
+      if (data?.skipped || !data?.reply) {
+        busyRef.current = false;
+        if (!closedRef.current) setStatus("listening");
+        return;
       }
-    };
-    source.start();
-  }, []);
 
-  const enqueueAudio = useCallback((base64Audio: string) => {
-    const ctx = playbackContextRef.current;
-    if (!ctx) return;
-
-    const pcmBuffer = base64ToArrayBuffer(base64Audio);
-    const pcm16 = new Int16Array(pcmBuffer);
-    const float32 = new Float32Array(pcm16.length);
-    for (let i = 0; i < pcm16.length; i++) float32[i] = pcm16[i] / 32768;
-
-    // A Gemini Live devolve áudio a 24kHz, mono
-    const audioBuffer = ctx.createBuffer(1, float32.length, 24000);
-    audioBuffer.copyToChannel(float32, 0);
-    playbackQueueRef.current.push(audioBuffer);
-    playNextChunk();
-  }, [playNextChunk]);
+      historyRef.current.push({ role: "user", content: data.transcript });
+      historyRef.current.push({ role: "assistant", content: data.reply });
+      setLastUser(data.transcript);
+      setLastReply(data.reply);
+      speakReply(data.reply);
+    } catch (err) {
+      console.error("Kojak Live:", err);
+      busyRef.current = false;
+      if (!closedRef.current) {
+        setStatus("listening");
+        toast({
+          title: "Kojak Live",
+          description: err instanceof Error ? err.message : "Falha ao processar o áudio.",
+          variant: "destructive",
+        });
+      }
+    }
+  }, [language, profile, speakReply, toast]);
 
   const cleanup = useCallback(() => {
-    wsRef.current?.close();
-    wsRef.current = null;
-    processorRef.current?.disconnect();
-    processorRef.current = null;
-    micStreamRef.current?.getTracks().forEach((t) => t.stop());
-    micStreamRef.current = null;
-    audioContextRef.current?.close();
-    audioContextRef.current = null;
-    playbackContextRef.current?.close();
-    playbackContextRef.current = null;
-    playbackQueueRef.current = [];
+    closedRef.current = true;
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    try { recorderRef.current?.state !== "inactive" && recorderRef.current?.stop(); } catch { /* noop */ }
+    recorderRef.current = null;
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    audioCtxRef.current?.close().catch(() => undefined);
+    audioCtxRef.current = null;
+    window.speechSynthesis?.cancel();
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
+    closedRef.current = false;
 
-    async function connect() {
+    async function start() {
       try {
-        // 1. Pede o token efêmero pro nosso backend (a chave real nunca sai do Supabase)
-        const { data, error } = await supabase.functions.invoke("kojak-live-token", {
-          body: { userId: user?.id ?? null },
+        // Microfone com cancelamento de eco, supressão de ruído e ganho automático.
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            channelCount: 1,
+            sampleRate: 48000,
+          },
         });
+        if (closedRef.current) { stream.getTracks().forEach((t) => t.stop()); return; }
+        streamRef.current = stream;
 
-        if (error || data?.error) {
-          throw new Error(data?.error || error?.message || "Erro ao iniciar Kojak Live");
-        }
-        if (cancelled) return;
+        const ctx = new AudioContext();
+        audioCtxRef.current = ctx;
+        const source = ctx.createMediaStreamSource(stream);
 
-        const { token, model } = data;
+        // Filtro passa-alta corta rumor/ar-condicionado; passa-baixa corta chiado.
+        const highpass = ctx.createBiquadFilter();
+        highpass.type = "highpass";
+        highpass.frequency.value = 120;
+        const lowpass = ctx.createBiquadFilter();
+        lowpass.type = "lowpass";
+        lowpass.frequency.value = 6000;
 
-        // 2. Abre o microfone
-        const micStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, sampleRate: 16000 } });
-        if (cancelled) { micStream.getTracks().forEach(t => t.stop()); return; }
-        micStreamRef.current = micStream;
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 1024;
+        analyser.smoothingTimeConstant = 0.7;
+        analyserRef.current = analyser;
 
-        // 3. Contextos de áudio (um pra captar, um pra tocar — evita eco entre os dois)
-        const audioContext = new AudioContext({ sampleRate: 16000 });
-        audioContextRef.current = audioContext;
-        playbackContextRef.current = new AudioContext({ sampleRate: 24000 });
+        source.connect(highpass);
+        highpass.connect(lowpass);
+        lowpass.connect(analyser);
 
-        // 4. Abre o WebSocket direto com a Gemini, usando o token efêmero (não a chave real)
-        const ws = new WebSocket(
-          `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained?access_token=${token}`
-        );
-        wsRef.current = ws;
+        const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+          ? "audio/webm;codecs=opus"
+          : "audio/webm";
 
-        ws.onopen = () => {
-          if (cancelled) return;
-          // Primeira mensagem OBRIGATÓRIA: setup (modelo já veio travado no token)
-          ws.send(JSON.stringify({ setup: { model } }));
+        setStatus("listening");
+
+        const buf = new Float32Array(analyser.fftSize);
+        let calibrating = true;
+        let calibrationSamples: number[] = [];
+        const startedAt = performance.now();
+
+        const startRecording = () => {
+          chunksRef.current = [];
+          const rec = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 32000 });
+          recorderRef.current = rec;
+          rec.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+          rec.onstop = () => {
+            const blob = new Blob(chunksRef.current, { type: mime });
+            chunksRef.current = [];
+            if (blob.size > 2000) sendUtterance(blob);
+            else { busyRef.current = false; if (!closedRef.current) setStatus("listening"); }
+          };
+          rec.start();
+          setStatus("capturing");
         };
 
-        ws.onmessage = async (event) => {
-          if (cancelled) return;
-          const text = typeof event.data === "string" ? event.data : await (event.data as Blob).text();
-          let msg: any;
-          try {
-            msg = JSON.parse(text);
-          } catch {
+        const stopRecording = () => {
+          const rec = recorderRef.current;
+          recorderRef.current = null;
+          if (rec && rec.state !== "inactive") rec.stop();
+        };
+
+        const tick = () => {
+          if (closedRef.current) return;
+          rafRef.current = requestAnimationFrame(tick);
+
+          analyser.getFloatTimeDomainData(buf);
+          let sum = 0;
+          for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+          const rms = Math.sqrt(sum / buf.length);
+          setLevel(Math.min(1, rms * 12));
+
+          const now = performance.now();
+
+          // Calibra o piso de ruído do ambiente no primeiro 1,2s.
+          if (calibrating) {
+            calibrationSamples.push(rms);
+            if (now - startedAt > 1200) {
+              calibrationSamples.sort((a, b) => a - b);
+              const median = calibrationSamples[Math.floor(calibrationSamples.length / 2)] || 0.005;
+              noiseFloorRef.current = Math.max(0.004, median);
+              calibrating = false;
+            }
             return;
           }
 
-          if (msg.setupComplete) {
-            setStatus("listening");
-
-            // Começa a mandar áudio do microfone só depois do setup confirmado
-            const source = audioContext.createMediaStreamSource(micStream);
-            const processor = audioContext.createScriptProcessor(4096, 1, 1);
-            processorRef.current = processor;
-
-            processor.onaudioprocess = (e) => {
-              if (mutedRef.current || ws.readyState !== WebSocket.OPEN) return;
-              const input = e.inputBuffer.getChannelData(0);
-              const pcm = floatTo16BitPCM(input);
-              ws.send(JSON.stringify({
-                realtimeInput: {
-                  audio: { data: arrayBufferToBase64(pcm), mimeType: "audio/pcm;rate=16000" },
-                },
-              }));
-            };
-
-            source.connect(processor);
-            processor.connect(audioContext.destination);
+          // Não capta enquanto a IA fala, enquanto processa, ou no mudo.
+          if (mutedRef.current || busyRef.current) {
+            if (recorderRef.current) stopRecording();
+            speakingSinceRef.current = null;
+            silenceSinceRef.current = null;
             return;
           }
 
-          if (msg.serverContent?.modelTurn?.parts) {
-            for (const part of msg.serverContent.modelTurn.parts) {
-              if (part.inlineData?.data) {
-                enqueueAudio(part.inlineData.data);
+          // Limiar dinâmico: ruído de fundo * sensibilidade. Vozes distantes ficam
+          // abaixo do limiar e são ignoradas.
+          const gate = Math.max(0.018, noiseFloorRef.current * (2 + sensitivityRef.current * 1.6));
+          const isSpeech = rms > gate;
+
+          if (isSpeech) {
+            silenceSinceRef.current = null;
+            if (speakingSinceRef.current === null) {
+              speakingSinceRef.current = now;
+              startRecording();
+            } else if (now - speakingSinceRef.current > MAX_SPEECH_MS) {
+              busyRef.current = true;
+              speakingSinceRef.current = null;
+              stopRecording();
+            }
+          } else if (speakingSinceRef.current !== null) {
+            if (silenceSinceRef.current === null) silenceSinceRef.current = now;
+            if (now - silenceSinceRef.current > SILENCE_MS) {
+              const duration = silenceSinceRef.current - speakingSinceRef.current;
+              speakingSinceRef.current = null;
+              silenceSinceRef.current = null;
+              if (duration >= MIN_SPEECH_MS) {
+                busyRef.current = true;
+                stopRecording();
+              } else {
+                // Ruído curto: descarta.
+                const rec = recorderRef.current;
+                recorderRef.current = null;
+                if (rec && rec.state !== "inactive") { rec.onstop = null as any; rec.stop(); }
+                chunksRef.current = [];
+                setStatus("listening");
               }
             }
           }
-
-          // Gemini avisa quando a pessoa começa a falar (interrupção) — para o que tava tocando
-          if (msg.serverContent?.interrupted) {
-            playbackQueueRef.current = [];
-            isPlayingRef.current = false;
-            setStatus("listening");
-          }
         };
 
-        ws.onerror = () => {
-          if (cancelled) return;
-          setStatus("error");
-          setErrorMsg("Erro na conexão com o Kojak Live.");
-        };
-
-        ws.onclose = () => {
-          if (cancelled) return;
-          setStatus((s) => (s === "error" ? s : "error"));
-        };
+        rafRef.current = requestAnimationFrame(tick);
       } catch (err) {
-        if (cancelled) return;
-        const message = err instanceof Error ? err.message : "Erro desconhecido";
+        console.error("Kojak Live init:", err);
         setStatus("error");
-        setErrorMsg(message);
-        toast({ title: "Kojak Live", description: message, variant: "destructive" });
+        setErrorMsg(
+          err instanceof Error && err.name === "NotAllowedError"
+            ? "Permita o acesso ao microfone para usar o Kojak Live."
+            : err instanceof Error ? err.message : "Não foi possível iniciar o Kojak Live.",
+        );
       }
     }
 
-    connect();
+    start();
+    return cleanup;
+  }, [cleanup, sendUtterance]);
 
-    return () => {
-      cancelled = true;
-      cleanup();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const handleClose = () => { cleanup(); onClose(); };
 
-  const toggleMute = () => {
-    mutedRef.current = !mutedRef.current;
-    setMuted(mutedRef.current);
-  };
-
-  const handleEndCall = () => {
-    cleanup();
-    onClose();
+  const statusLabel: Record<LiveStatus, string> = {
+    connecting: t("liveConnecting"),
+    listening: t("liveListening"),
+    capturing: t("liveCapturing"),
+    thinking: t("liveThinking"),
+    speaking: t("liveSpeaking"),
+    error: t("errorTitle"),
   };
 
   return (
-    <div className="fixed inset-0 z-[200] bg-background flex flex-col items-center justify-center p-6">
-      <button
-        onClick={handleEndCall}
-        className="absolute top-6 right-6 p-2 rounded-full bg-foreground/10 hover:bg-foreground/20 transition-colors"
-      >
-        <X className="w-6 h-6" />
-      </button>
-
-      <div className="relative w-40 h-40 mb-8">
-        <div
-          className={`absolute inset-0 rounded-full bg-gradient-purple blur-2xl transition-opacity ${
-            status === "speaking" ? "opacity-70 animate-pulse" : status === "listening" ? "opacity-40" : "opacity-20"
-          }`}
-        />
-        <div className="relative w-full h-full rounded-full overflow-hidden border-2 border-primary/40 glow-purple-lg">
-          <img src={KOJAK_LOGO_BASE64} alt="Kojak Live" className="w-full h-full object-cover" />
-        </div>
-        {status === "listening" && (
-          <div className="absolute -inset-2 rounded-full border-2 border-primary/30 animate-ping" />
-        )}
+    <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-xl flex flex-col">
+      <div className="flex items-center justify-between p-4">
+        <span className="text-sm font-semibold tracking-tight">Kojak Live</span>
+        <button onClick={handleClose} className="w-9 h-9 rounded-full glass-card flex items-center justify-center hover:border-primary/40 transition-colors" aria-label={t("close")}>
+          <X className="w-4 h-4" />
+        </button>
       </div>
 
-      <h2 className="text-xl font-bold text-gradient-purple mb-1">Kojak Live</h2>
-      <p className="text-sm text-muted-foreground mb-8">
-        {status === "connecting" && "Conectando..."}
-        {status === "listening" && "Ouvindo — pode falar"}
-        {status === "speaking" && "Kojak está falando..."}
-        {status === "error" && (errorMsg || "Algo deu errado")}
-      </p>
+      <div className="flex-1 flex flex-col items-center justify-center px-6 gap-8">
+        <div className="relative w-36 h-36">
+          <div
+            className="absolute inset-0 rounded-full bg-gradient-purple blur-2xl transition-opacity duration-200"
+            style={{ opacity: 0.25 + level * 0.6 }}
+          />
+          <div
+            className={cn(
+              "relative w-full h-full rounded-full overflow-hidden bg-gradient-purple flex items-center justify-center transition-transform duration-100",
+              status === "speaking" && "animate-pulse-slow",
+            )}
+            style={{ transform: `scale(${1 + level * 0.12})` }}
+          >
+            <img src={KOJAK_LOGO_BASE64} alt="Kojak IA" className="w-full h-full object-cover" />
+          </div>
+        </div>
 
-      <div className="flex items-center gap-6">
+        <div className="text-center min-h-[3rem]">
+          <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+            {(status === "thinking" || status === "connecting") && <Loader2 className="w-4 h-4 animate-spin" />}
+            {status === "speaking" && <Volume2 className="w-4 h-4 text-primary" />}
+            <span>{statusLabel[status]}</span>
+          </div>
+          {errorMsg && <p className="mt-3 text-sm text-destructive max-w-xs">{errorMsg}</p>}
+        </div>
+
+        {(lastUser || lastReply) && (
+          <div className="w-full max-w-md space-y-3">
+            {lastUser && (
+              <p className="text-xs text-muted-foreground text-right">"{lastUser}"</p>
+            )}
+            {lastReply && (
+              <div className="glass-card rounded-2xl p-4 text-sm leading-relaxed">{lastReply}</div>
+            )}
+          </div>
+        )}
+
+        <div className="w-full max-w-xs">
+          <div className="flex items-center justify-between text-xs text-muted-foreground mb-2">
+            <span>{t("liveSensitivity")}</span>
+            <span>{sensitivity <= 2 ? t("liveFar") : sensitivity >= 5 ? t("liveClose") : t("liveNormal")}</span>
+          </div>
+          <input
+            type="range"
+            min={1}
+            max={6}
+            step={1}
+            value={sensitivity}
+            onChange={(e) => setSensitivity(Number(e.target.value))}
+            className="w-full accent-primary"
+            aria-label={t("liveSensitivity")}
+          />
+          <p className="mt-2 text-[11px] text-muted-foreground text-center">{t("liveSensitivityHint")}</p>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-center gap-4 p-8 pb-12">
         <button
-          onClick={toggleMute}
-          disabled={status === "error"}
-          className={`p-4 rounded-full transition-all ${
-            muted ? "bg-destructive text-white" : "bg-foreground/10 hover:bg-foreground/20"
-          }`}
+          onClick={() => setMuted((v) => !v)}
+          className={cn(
+            "w-14 h-14 rounded-full flex items-center justify-center transition-colors glass-card",
+            muted ? "bg-destructive/20 border-destructive/40 text-destructive" : "hover:border-primary/40",
+          )}
+          aria-label={muted ? t("liveUnmute") : t("liveMute")}
         >
-          {muted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+          {muted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
         </button>
         <button
-          onClick={handleEndCall}
-          className="p-4 rounded-full bg-destructive text-white hover:scale-105 transition-transform"
+          onClick={handleClose}
+          className="w-16 h-16 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center hover:scale-105 transition-transform"
+          aria-label={t("liveEnd")}
         >
           <PhoneOff className="w-6 h-6" />
         </button>

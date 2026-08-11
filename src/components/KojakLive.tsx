@@ -95,12 +95,12 @@ export function KojakLive({ onClose }: KojakLiveProps) {
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = LOCALE_MAP[language] || "pt-BR";
-    u.rate = 1.02;
-    u.pitch = 1.0;
+    u.rate = 1.0;
+    u.pitch = 0.85;
     const voices = window.speechSynthesis.getVoices();
     const preferred = voices.find(
       (v) => v.lang.startsWith(u.lang.slice(0, 2)) &&
-        /female|feminina|luciana|francisca|google/i.test(v.name),
+        /male|masculin|ricardo|daniel|google/i.test(v.name) && !/female|feminina/i.test(v.name),
     ) || voices.find((v) => v.lang.startsWith(u.lang.slice(0, 2)));
     if (preferred) u.voice = preferred;
 
@@ -109,12 +109,12 @@ export function KojakLive({ onClose }: KojakLiveProps) {
     window.speechSynthesis.speak(u);
   }, [language, finishSpeaking]);
 
-  /** Gera o áudio neural (Gemini/Kore) de uma frase. Retorna null se falhar
+  /** Gera o áudio neural (Gemini/Orus) de uma frase. Retorna null se falhar
    * (nesse caso quem chamou decide o fallback), nunca lança exceção. */
   const fetchSentenceAudio = useCallback(async (sentence: string): Promise<string | null> => {
     try {
       const { data, error } = await supabase.functions.invoke("kojak-voice", {
-        body: { text: sentence, voice: "Kore" },
+        body: { text: sentence, voice: "Orus" },
       });
       if (error || !data?.audio) return null;
       return data.audio as string;
@@ -164,7 +164,14 @@ export function KojakLive({ onClose }: KojakLiveProps) {
             if (!("speechSynthesis" in window)) { resolve(); return; }
             const u = new SpeechSynthesisUtterance(sentences[i]);
             u.lang = LOCALE_MAP[language] || "pt-BR";
-            u.rate = 1.02;
+            u.rate = 1.0;
+            u.pitch = 0.85;
+            const voices = window.speechSynthesis.getVoices();
+            const preferred = voices.find(
+              (v) => v.lang.startsWith(u.lang.slice(0, 2)) &&
+                /male|masculin|ricardo|daniel|google/i.test(v.name) && !/female|feminina/i.test(v.name),
+            ) || voices.find((v) => v.lang.startsWith(u.lang.slice(0, 2)));
+            if (preferred) u.voice = preferred;
             u.onend = () => resolve();
             u.onerror = () => resolve();
             window.speechSynthesis.speak(u);
@@ -421,7 +428,7 @@ export function KojakLive({ onClose }: KojakLiveProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-xl flex flex-col">
+    <div className="fixed inset-0 z-[60] bg-background/95 backdrop-blur-xl flex flex-col">
       <div className="flex items-center justify-between p-4 shrink-0">
         <span className="text-sm font-semibold tracking-tight">Kojak Live</span>
         <button onClick={handleClose} className="w-9 h-9 rounded-full glass-card flex items-center justify-center hover:border-primary/40 transition-colors" aria-label={t("close")}>

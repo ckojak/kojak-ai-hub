@@ -9,6 +9,7 @@ import {
   resolveTier,
   sseResponse,
 } from "../_shared/groq.ts";
+import { checkAndIncrementUsage, limitReachedResponse } from "../_shared/usage.ts";
 import { callGeminiFallback, geminiErrorResponse, geminiStreamToOpenAISSE } from "../_shared/gemini.ts";
 import { retrieveRelevantMemories, extractMemories } from "./memoryService.ts";
 
@@ -48,6 +49,7 @@ serve(async (req) => {
       stream = true,
       userId,
       chatId,
+      webSearch,
     } = body || {};
 
     if (!prompt && !image) return jsonError("Prompt é obrigatório");
@@ -56,6 +58,11 @@ serve(async (req) => {
     if (!GROQ_API_KEY) return missingKeyResponse();
 
     const resolved = resolveTier(tier, mode);
+
+    // Trava de uso diário gratuito (por tier, por usuário logado).
+    const usage = await checkAndIncrementUsage(userId, resolved);
+    if (!usage.allowed) return limitReachedResponse(usage);
+
     const messages = buildMessages({
       systemPrompt: SYSTEM_PROMPT,
       context,
@@ -78,8 +85,9 @@ serve(async (req) => {
     }
 
     const hasImage = !!(image || reference_image);
+    const useWeb = !!webSearch && !hasImage;
 
-    let response = await callGroq({ apiKey: GROQ_API_KEY, tier: resolved, messages, stream: !!stream, hasImage });
+    let response = await callGroq({ apiKey: GROQ_API_KEY, tier: resolved, messages, stream: !!stream, hasImage, webSearch: useWeb });
     let usedGemini = false;
 
     if (!response.ok && [429, 402, 500, 502, 503, 504].includes(response.status)) {

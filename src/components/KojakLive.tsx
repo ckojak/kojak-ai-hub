@@ -172,6 +172,7 @@ export function KojakLive({ onClose }: KojakLiveProps) {
     streamRef.current = null;
     audioCtxRef.current?.close().catch(() => undefined);
     audioCtxRef.current = null;
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
     window.speechSynthesis?.cancel();
   }, []);
 

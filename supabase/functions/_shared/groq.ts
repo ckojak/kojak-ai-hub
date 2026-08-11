@@ -192,11 +192,19 @@ export async function callGroq(opts: {
       ? VISION_MODEL
       : cfg.model;
 
+  // O modelo agente (web search) tem orçamento de tokens menor: encurta o
+  // histórico e o teto de saída pra não estourar (413).
+  const messages = opts.webSearch
+    ? [opts.messages[0], ...opts.messages.slice(-5)].map((m: any) =>
+        typeof m.content === "string" ? { ...m, content: m.content.slice(0, 4000) } : m,
+      )
+    : opts.messages;
+
   const payload: Record<string, unknown> = {
     model,
-    messages: opts.messages,
+    messages,
     temperature: cfg.temperature,
-    max_tokens: cfg.max_tokens,
+    max_tokens: opts.webSearch ? Math.min(cfg.max_tokens, 1024) : cfg.max_tokens,
     top_p: 0.95,
     stream: opts.stream,
   };

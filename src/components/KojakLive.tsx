@@ -114,7 +114,7 @@ export function KojakLive({ onClose }: KojakLiveProps) {
   const fetchSentenceAudio = useCallback(async (sentence: string): Promise<string | null> => {
     try {
       const { data, error } = await supabase.functions.invoke("kojak-voice", {
-        body: { text: sentence, voice: "Orus" },
+        body: { text: sentence, voice: "Algenib" },
       });
       if (error || !data?.audio) return null;
       return data.audio as string;

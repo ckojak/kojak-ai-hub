@@ -20,6 +20,37 @@ const MIN_SPEECH_MS = 400;
 /** Duração máxima de um turno. */
 const MAX_SPEECH_MS = 20000;
 
+/** Quebra o texto em frases curtas pra dar pra falar em pipeline (frase 1 toca
+ * enquanto a frase 2 já está sendo gerada), em vez de esperar o texto inteiro
+ * virar áudio antes de começar a falar. */
+function splitIntoSentences(text: string): string[] {
+  const clean = text.replace(/\n+/g, " ").trim();
+  if (!clean) return [];
+
+  const parts: string[] = [];
+  let current = "";
+  for (let i = 0; i < clean.length; i++) {
+    current += clean[i];
+    const isBoundary = /[.!?;]/.test(clean[i]);
+    if (isBoundary && (clean[i + 1] === " " || clean[i + 1] === undefined)) {
+      parts.push(current.trim());
+      current = "";
+    }
+  }
+  if (current.trim()) parts.push(current.trim());
+
+  // Junta frases muito curtas com a seguinte pra não ficar picotado ("Sim." "Claro." etc).
+  const merged: string[] = [];
+  for (const p of parts) {
+    if (merged.length > 0 && merged[merged.length - 1].length < 15) {
+      merged[merged.length - 1] = `${merged[merged.length - 1]} ${p}`;
+    } else {
+      merged.push(p);
+    }
+  }
+  return merged.length ? merged : [clean];
+}
+
 export function KojakLive({ onClose }: KojakLiveProps) {
   const { user, profile } = useAuth();
   const { language, t } = useLanguage();
@@ -78,7 +109,23 @@ export function KojakLive({ onClose }: KojakLiveProps) {
     window.speechSynthesis.speak(u);
   }, [language, finishSpeaking]);
 
-  /** Voz neural Kore (Gemini TTS) via edge function, com fallback nativo. */
+  /** Gera o áudio neural (Gemini/Kore) de uma frase. Retorna null se falhar
+   * (nesse caso quem chamou decide o fallback), nunca lança exceção. */
+  const fetchSentenceAudio = useCallback(async (sentence: string): Promise<string | null> => {
+    try {
+      const { data, error } = await supabase.functions.invoke("kojak-voice", {
+        body: { text: sentence, voice: "Kore" },
+      });
+      if (error || !data?.audio) return null;
+      return data.audio as string;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  /** Fala a resposta em pipeline: a 1ª frase toca assim que fica pronta, e a
+   * próxima já é gerada em paralelo enquanto a atual está tocando — em vez de
+   * esperar a resposta inteira virar áudio antes de começar a falar. */
   const speakReply = useCallback(async (text: string) => {
     const clean = text
       .replace(/```[\s\S]*?```/g, " ")
@@ -93,23 +140,54 @@ export function KojakLive({ onClose }: KojakLiveProps) {
     window.speechSynthesis?.cancel();
     setStatus("speaking");
 
-    try {
-      const { data, error } = await supabase.functions.invoke("kojak-voice", {
-        body: { text: clean, voice: "Kore" },
-      });
-      if (closedRef.current) return;
-      if (error || !data?.audio) throw new Error(error?.message || "sem áudio");
+    const sentences = splitIntoSentences(clean);
+    if (sentences.length === 0) { finishSpeaking(); return; }
 
-      const audio = new Audio(data.audio);
-      audioRef.current = audio;
-      audio.onended = finishSpeaking;
-      audio.onerror = () => speakBrowserFallback(clean);
-      await audio.play().catch(() => speakBrowserFallback(clean));
+    try {
+      let nextAudioPromise: Promise<string | null> = fetchSentenceAudio(sentences[0]);
+
+      for (let i = 0; i < sentences.length; i++) {
+        if (closedRef.current) return;
+
+        const audioUrl = await nextAudioPromise;
+
+        // Prefetch: já dispara a geração da próxima frase enquanto essa toca.
+        if (i + 1 < sentences.length) {
+          nextAudioPromise = fetchSentenceAudio(sentences[i + 1]);
+        }
+
+        if (closedRef.current) return;
+
+        if (!audioUrl) {
+          // Sem voz neural pra essa frase específica: usa a voz do navegador só nela.
+          await new Promise<void>((resolve) => {
+            if (!("speechSynthesis" in window)) { resolve(); return; }
+            const u = new SpeechSynthesisUtterance(sentences[i]);
+            u.lang = LOCALE_MAP[language] || "pt-BR";
+            u.rate = 1.02;
+            u.onend = () => resolve();
+            u.onerror = () => resolve();
+            window.speechSynthesis.speak(u);
+          });
+          continue;
+        }
+
+        await new Promise<void>((resolve) => {
+          const audio = new Audio(audioUrl);
+          audioRef.current = audio;
+          audio.onended = () => resolve();
+          audio.onerror = () => resolve();
+          audio.play().catch(() => resolve());
+        });
+      }
     } catch (err) {
       console.error("Kojak Live voz neural indisponível:", err);
       if (!closedRef.current) speakBrowserFallback(clean);
+      return;
     }
-  }, [finishSpeaking, speakBrowserFallback]);
+
+    if (!closedRef.current) finishSpeaking();
+  }, [finishSpeaking, fetchSentenceAudio, language, speakBrowserFallback]);
 
 
   const sendUtterance = useCallback(async (blob: Blob) => {
@@ -344,15 +422,15 @@ export function KojakLive({ onClose }: KojakLiveProps) {
 
   return (
     <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-xl flex flex-col">
-      <div className="flex items-center justify-between p-4">
+      <div className="flex items-center justify-between p-4 shrink-0">
         <span className="text-sm font-semibold tracking-tight">Kojak Live</span>
         <button onClick={handleClose} className="w-9 h-9 rounded-full glass-card flex items-center justify-center hover:border-primary/40 transition-colors" aria-label={t("close")}>
           <X className="w-4 h-4" />
         </button>
       </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center px-6 gap-8">
-        <div className="relative w-36 h-36">
+      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col items-center justify-center px-6 gap-4 sm:gap-8 py-4">
+        <div className="relative w-24 h-24 sm:w-36 sm:h-36 shrink-0">
           <div
             className="absolute inset-0 rounded-full bg-gradient-purple blur-2xl transition-opacity duration-200"
             style={{ opacity: 0.25 + level * 0.6 }}
@@ -368,7 +446,7 @@ export function KojakLive({ onClose }: KojakLiveProps) {
           </div>
         </div>
 
-        <div className="text-center min-h-[3rem]">
+        <div className="text-center min-h-[3rem] shrink-0">
           <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
             {(status === "thinking" || status === "connecting") && <Loader2 className="w-4 h-4 animate-spin" />}
             {status === "speaking" && <Volume2 className="w-4 h-4 text-primary" />}
@@ -388,7 +466,7 @@ export function KojakLive({ onClose }: KojakLiveProps) {
           </div>
         )}
 
-        <div className="w-full max-w-xs">
+        <div className="w-full max-w-xs shrink-0">
           <div className="flex items-center justify-between text-xs text-muted-foreground mb-2">
             <span>{t("liveSensitivity")}</span>
             <span>{sensitivity <= 2 ? t("liveFar") : sensitivity >= 5 ? t("liveClose") : t("liveNormal")}</span>
@@ -408,8 +486,8 @@ export function KojakLive({ onClose }: KojakLiveProps) {
       </div>
 
       <div
-        className="flex items-center justify-center gap-4 p-8"
-        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 3rem)" }}
+        className="flex items-center justify-center gap-4 p-6 sm:p-8 shrink-0"
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 1.5rem)" }}
       >
         <button
           onClick={() => setMuted((v) => !v)}

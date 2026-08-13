@@ -3,6 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders, GEMINI_BASE, urlToInlineData } from "../_shared/gemini.ts";
 
 const TIMEOUT_MS = 45_000;
+const MAX_IMAGES = 10;
 
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
   const controller = new AbortController();
@@ -19,13 +20,25 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { prompt, image, reference_image, context } = body || {};
+    const { prompt, image, reference_image, images, context } = body || {};
 
     const safePrompt = typeof prompt === "string" ? prompt.trim() : "";
-    const hasImage = typeof image === "string" && image.length > 100;
-    const hasReference = typeof reference_image === "string" && reference_image.length > 100;
 
-    if (!safePrompt && !hasImage && !hasReference) {
+    // Aceita tanto o formato novo (images: string[], até 10) quanto o antigo
+    // (image / reference_image únicos), pra não quebrar chamadas antigas.
+    const isValidImage = (v: unknown): v is string => typeof v === "string" && v.length > 100;
+
+    let allImages: string[] = [];
+    if (Array.isArray(images)) {
+      allImages = images.filter(isValidImage).slice(0, MAX_IMAGES);
+    }
+    if (isValidImage(reference_image) && !allImages.includes(reference_image)) allImages.unshift(reference_image);
+    if (isValidImage(image) && !allImages.includes(image)) allImages.push(image);
+    allImages = allImages.slice(0, MAX_IMAGES);
+
+    const hasImages = allImages.length > 0;
+
+    if (!safePrompt && !hasImages) {
       return new Response(
         JSON.stringify({ error: "Forneça um prompt ou ao menos uma imagem." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -37,52 +50,36 @@ serve(async (req) => {
       throw new Error("GEMINI_API_KEY não está configurada");
     }
 
-    let messageContent: any;
+    // Prompt em linguagem natural (o Nano Banana funciona bem melhor com
+    // frases completas descrevendo a cena do que com listas de tags soltas
+    // tipo "ultra hd, 4k, photorealistic" — isso confunde o modelo de
+    // linguagem por trás da geração e piora o resultado).
+    const qualityHint =
+      "com composição bem pensada, iluminação natural e coerente, riqueza de detalhes e acabamento profissional, em altíssima resolução";
 
-    if (!hasImage && !hasReference) {
-      messageContent = `Crie uma imagem profissional, de alta qualidade e realista: ${safePrompt}. Ultra high resolution, photorealistic, professional quality.`;
+    let instructionText: string;
+
+    if (!hasImages) {
+      instructionText =
+        `Crie uma imagem fotorrealista e profissional ${qualityHint}, retratando: ${safePrompt}.`;
+    } else if (allImages.length === 1) {
+      instructionText = safePrompt
+        ? `Usando a imagem enviada como base, ${safePrompt}. Mantenha o resultado fotorrealista, ${qualityHint}.`
+        : `Melhore esta imagem: aumente a nitidez, corrija a iluminação e refine os detalhes, mantendo-a fotorrealista, ${qualityHint}.`;
     } else {
-      messageContent = [];
-
-      if (hasReference && hasImage) {
-        messageContent.push({ type: "text", text: "IMAGEM ALVO (base da composição):" });
-        messageContent.push({ type: "image_url", image_url: { url: reference_image } });
-        messageContent.push({ type: "text", text: "IMAGEM FONTE (extrair e aplicar no alvo):" });
-        messageContent.push({ type: "image_url", image_url: { url: image } });
-        messageContent.push({
-          type: "text",
-          text: `Instrução: ${safePrompt || "Faça composição fotorrealista, integrando harmoniosamente o elemento principal da fonte na cena alvo."} Ultra high resolution, seamless integration, professional.`,
-        });
-      } else if (hasReference) {
-        messageContent.push({ type: "text", text: "Use como referência de estilo:" });
-        messageContent.push({ type: "image_url", image_url: { url: reference_image } });
-        messageContent.push({
-          type: "text",
-          text: `Crie: ${safePrompt || "Recrie em alta qualidade"} mantendo o estilo e composição da referência. Ultra high resolution.`,
-        });
-      } else if (hasImage) {
-        messageContent.push({ type: "text", text: "Edite/transforme:" });
-        messageContent.push({ type: "image_url", image_url: { url: image } });
-        messageContent.push({
-          type: "text",
-          text: `Instrução: ${safePrompt || "Melhore qualidade, detalhes e clareza."} Ultra high resolution, photorealistic.`,
-        });
-      }
+      instructionText =
+        `Você recebeu ${allImages.length} imagens de referência, na ordem em que aparecem abaixo. ` +
+        `${safePrompt || "Combine os elementos principais dessas imagens em uma única composição coerente e harmoniosa."} ` +
+        `Integre os elementos de forma natural, respeitando perspectiva, escala e iluminação entre eles, ${qualityHint}.`;
     }
 
     // Monta o body nativo do Gemini (o endpoint compat-OpenAI falha ao
     // serializar imagens geradas: "Unhandled generated data mime type: image/jpeg")
-    const parts: any[] = [];
-    if (typeof messageContent === "string") {
-      parts.push({ text: messageContent });
-    } else {
-      for (const block of messageContent) {
-        if (block.type === "text") parts.push({ text: block.text });
-        else if (block.type === "image_url") {
-          const inline = await urlToInlineData(block.image_url.url);
-          if (inline) parts.push(inline);
-        }
-      }
+    const parts: any[] = [{ text: instructionText }];
+    for (let i = 0; i < allImages.length; i++) {
+      if (allImages.length > 1) parts.push({ text: `Imagem ${i + 1}:` });
+      const inline = await urlToInlineData(allImages[i]);
+      if (inline) parts.push(inline);
     }
 
     async function callVision() {

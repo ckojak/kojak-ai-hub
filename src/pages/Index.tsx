@@ -122,8 +122,9 @@ const Index = () => {
     return full;
   }, []);
 
-  const handleSendMessage = useCallback(async (content: string, mode: string, imageUrl?: string, options?: { webSearch?: boolean }) => {
-    if (!content.trim() && !imageUrl && !referenceImage) return;
+  const handleSendMessage = useCallback(async (content: string, mode: string, imageUrls?: string[], options?: { webSearch?: boolean }) => {
+    const hasImages = !!(imageUrls && imageUrls.length > 0);
+    if (!content.trim() && !hasImages && !referenceImage) return;
 
     let chatId = currentChat?.id;
 
@@ -136,7 +137,7 @@ const Index = () => {
         }
         chatId = newChat.id;
       }
-      await addMessage("user", content, imageUrl ? "image" : "text", imageUrl, chatId);
+      await addMessage("user", content, hasImages ? "image" : "text", imageUrls?.[0], chatId);
       await logActivity(`Mensagem enviada no modo ${mode}`, { preview: content.slice(0, 100) });
     } else {
       if (localMessages.length === 0) {
@@ -150,8 +151,8 @@ const Index = () => {
         chat_id: "local",
         role: "user",
         content,
-        type: imageUrl ? "image" : "text",
-        media_url: imageUrl,
+        type: hasImages ? "image" : "text",
+        media_url: imageUrls?.[0],
         created_at: new Date().toISOString(),
       };
       setLocalMessages(prev => [...prev, userMessage]);
@@ -169,7 +170,8 @@ const Index = () => {
       prompt: content,
       context: personalContext,
       history: recentHistory,
-      image: imageUrl,
+      image: imageUrls?.[0],
+      images: imageUrls,
       reference_image: referenceImage,
       tier: aiTier,
       language,

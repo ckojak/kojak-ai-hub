@@ -18,8 +18,15 @@ const TIER_OPTIONS = [
   { id: "raciocinio" as const, label: "tierRaciocinio", desc: "tierRaciocinioDesc", emoji: "🧠", locked: true },
 ];
 
+/** Máximo de imagens por envio (Vision aceita várias pra compor/combinar). */
+const MAX_IMAGES = 10;
+/** Lado maior após compressão — suficiente pra qualidade e rápido de enviar. */
+const MAX_DIMENSION = 2048;
+/** Qualidade do JPEG comprimido. */
+const JPEG_QUALITY = 0.85;
+
 interface ChatInputProps {
-  onSend: (message: string, mode: string, imageUrl?: string, options?: { webSearch?: boolean }) => void;
+  onSend: (message: string, mode: string, imageUrls?: string[], options?: { webSearch?: boolean }) => void;
   isLoading?: boolean;
   activeMode: string;
   onModeChange: (mode: string) => void;
@@ -50,6 +57,37 @@ interface TextAttachment {
   text: string;
 }
 
+/** Redimensiona/comprime uma imagem no navegador antes de subir. Isso evita
+ * falha de envio com fotos de celular (que costumam vir com 8-15MB) sem
+ * perder qualidade perceptível — o Nano Banana não precisa do arquivo
+ * original gigante, só de resolução suficiente. */
+async function compressImage(file: File): Promise<File> {
+  // GIFs e imagens já pequenas não precisam de recompressão.
+  if (file.type === "image/gif" || file.size < 900 * 1024) return file;
+
+  const bitmap = await createImageBitmap(file).catch(() => null);
+  if (!bitmap) return file;
+
+  const scale = Math.min(1, MAX_DIMENSION / Math.max(bitmap.width, bitmap.height));
+  const w = Math.round(bitmap.width * scale);
+  const h = Math.round(bitmap.height * scale);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return file;
+  ctx.drawImage(bitmap, 0, 0, w, h);
+
+  const blob: Blob | null = await new Promise((resolve) =>
+    canvas.toBlob((b) => resolve(b), "image/jpeg", JPEG_QUALITY),
+  );
+  if (!blob) return file;
+
+  const newName = file.name.replace(/\.\w+$/, "") + ".jpg";
+  return new File([blob], newName, { type: "image/jpeg" });
+}
+
 export function ChatInput({
   onSend,
   isLoading,
@@ -74,8 +112,9 @@ export function ChatInput({
   const [webSearch, setWebSearch] = useState(false);
   const tierMenuRef = useRef<HTMLDivElement>(null);
   const attachMenuRef = useRef<HTMLDivElement>(null);
-  const [attachedImage, setAttachedImage] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [attachedImages, setAttachedImages] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [compressing, setCompressing] = useState(false);
   const [textAttachment, setTextAttachment] = useState<TextAttachment | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [processing, setProcessing] = useState<string | null>(null);
@@ -99,23 +138,52 @@ export function ChatInput({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [tierMenuOpen, attachMenuOpen]);
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (imageInputRef.current) imageInputRef.current.value = "";
+    if (files.length === 0) return;
 
-    if (!file.type.startsWith("image/")) {
-      toast({ title: "Arquivo inválido", description: "Por favor, selecione uma imagem.", variant: "destructive" });
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      toast({ title: "Arquivo muito grande", description: "O tamanho máximo é 5MB.", variant: "destructive" });
+    const invalid = files.find((f) => !f.type.startsWith("image/"));
+    if (invalid) {
+      toast({ title: "Arquivo inválido", description: "Selecione apenas imagens.", variant: "destructive" });
       return;
     }
 
-    setAttachedImage(file);
-    const reader = new FileReader();
-    reader.onloadend = () => setImagePreview(reader.result as string);
-    reader.readAsDataURL(file);
+    const room = MAX_IMAGES - attachedImages.length;
+    if (room <= 0) {
+      toast({ title: "Limite de imagens", description: `Você pode enviar no máximo ${MAX_IMAGES} imagens por vez.`, variant: "destructive" });
+      return;
+    }
+    const toAdd = files.slice(0, room);
+    if (files.length > room) {
+      toast({ title: "Limite de imagens", description: `Só cabem mais ${room}. As demais foram ignoradas.` });
+    }
+
+    setCompressing(true);
+    try {
+      const compressed = await Promise.all(toAdd.map(compressImage));
+
+      // Ainda gigante mesmo após comprimir (raro): recusa só essa.
+      const tooBig = compressed.filter((f) => f.size > 10 * 1024 * 1024);
+      const ok = compressed.filter((f) => f.size <= 10 * 1024 * 1024);
+      if (tooBig.length > 0) {
+        toast({ title: "Imagem muito grande", description: `${tooBig.length} imagem(ns) não puderam ser reduzidas o suficiente e foram ignoradas.`, variant: "destructive" });
+      }
+      if (ok.length === 0) return;
+
+      const newPreviews = await Promise.all(
+        ok.map((file) => new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        })),
+      );
+
+      setAttachedImages((prev) => [...prev, ...ok]);
+      setImagePreviews((prev) => [...prev, ...newPreviews]);
+    } finally {
+      setCompressing(false);
+    }
   };
 
   const handleDocSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -164,9 +232,14 @@ export function ChatInput({
     }
   };
 
-  const removeImage = () => {
-    setAttachedImage(null);
-    setImagePreview(null);
+  const removeImage = (index: number) => {
+    setAttachedImages((prev) => prev.filter((_, i) => i !== index));
+    setImagePreviews((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const clearAllImages = () => {
+    setAttachedImages([]);
+    setImagePreviews([]);
     if (imageInputRef.current) imageInputRef.current.value = "";
   };
 
@@ -174,7 +247,7 @@ export function ChatInput({
     try {
       const { data: { user } } = await supabase.auth.getUser();
       const fileExt = file.name.split(".").pop();
-      const fileName = `${user?.id || "anonymous"}/${Date.now()}.${fileExt}`;
+      const fileName = `${user?.id || "anonymous"}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${fileExt}`;
 
       const { data, error } = await supabase.storage.from("chat-attachments").upload(fileName, file);
       if (error) throw error;
@@ -183,25 +256,28 @@ export function ChatInput({
       return publicUrl;
     } catch (error) {
       console.error("Failed to upload image:", error);
-      toast({ title: "Erro no upload", description: "Não foi possível enviar a imagem. Tente novamente.", variant: "destructive" });
       return null;
     }
   };
 
-  const hasContent = !!(message.trim() || attachedImage || referenceImage || textAttachment);
+  const hasContent = !!(message.trim() || attachedImages.length > 0 || referenceImage || textAttachment);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!hasContent || isLoading || isUploading || processing) return;
+    if (!hasContent || isLoading || isUploading || processing || compressing) return;
 
-    let imageUrl: string | undefined;
+    let imageUrls: string[] | undefined;
 
-    if (attachedImage) {
+    if (attachedImages.length > 0) {
       setIsUploading(true);
-      const uploadedUrl = await uploadImage(attachedImage);
+      const uploaded = await Promise.all(attachedImages.map(uploadImage));
       setIsUploading(false);
-      if (!uploadedUrl) return;
-      imageUrl = uploadedUrl;
+      const failed = uploaded.filter((u) => !u).length;
+      if (failed > 0) {
+        toast({ title: "Erro no upload", description: `${failed} imagem(ns) não puderam ser enviadas. Tente novamente.`, variant: "destructive" });
+      }
+      imageUrls = uploaded.filter((u): u is string => !!u);
+      if (imageUrls.length === 0) return;
     }
 
     let finalMessage = message.trim();
@@ -212,10 +288,10 @@ export function ChatInput({
       finalMessage = `${finalMessage ? finalMessage + "\n\n" : ""}${header}:\n"""\n${textAttachment.text}\n"""`;
     }
 
-    onSend(finalMessage, activeMode, imageUrl, { webSearch });
+    onSend(finalMessage, activeMode, imageUrls, { webSearch });
     setMessage("");
     setTextAttachment(null);
-    removeImage();
+    clearAllImages();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -252,14 +328,33 @@ export function ChatInput({
           </div>
         )}
 
-        {/* Visor da Imagem Anexada (Fonte) */}
-        {imagePreview && (
+        {/* Imagens anexadas (até 10) */}
+        {(imagePreviews.length > 0 || compressing) && (
           <div className="p-3 border-b border-border">
-            <div className="relative inline-block">
-              <img src={imagePreview} alt="Preview" className="h-20 w-auto rounded-lg object-cover" />
-              <button type="button" onClick={removeImage} aria-label={t("close")} className="absolute -top-2 -right-2 w-6 h-6 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center hover:scale-110 transition-transform">
-                <X className="w-3 h-3" />
-              </button>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium text-muted-foreground">
+                {imagePreviews.length}/{MAX_IMAGES} imagens
+              </span>
+              {imagePreviews.length > 0 && (
+                <button type="button" onClick={clearAllImages} className="text-xs text-muted-foreground hover:text-destructive transition-colors">
+                  Limpar tudo
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {imagePreviews.map((src, i) => (
+                <div key={i} className="relative">
+                  <img src={src} alt={`Anexo ${i + 1}`} className="h-20 w-20 rounded-lg object-cover border border-border" />
+                  <button type="button" onClick={() => removeImage(i)} aria-label={t("close")} className="absolute -top-2 -right-2 w-6 h-6 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center hover:scale-110 transition-transform">
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+              {compressing && (
+                <div className="h-20 w-20 rounded-lg border border-dashed border-border flex items-center justify-center">
+                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -366,7 +461,7 @@ export function ChatInput({
         </div>
 
         <div className="flex items-end gap-2 p-3">
-          <input ref={imageInputRef} type="file" accept={IMAGE_ACCEPT} onChange={handleImageSelect} className="hidden" />
+          <input ref={imageInputRef} type="file" accept={IMAGE_ACCEPT} multiple onChange={handleImageSelect} className="hidden" />
           <input ref={docInputRef} type="file" accept={DOC_ACCEPT} onChange={handleDocSelect} className="hidden" />
           <input ref={audioInputRef} type="file" accept={AUDIO_ACCEPT} onChange={handleAudioSelect} className="hidden" />
 
@@ -381,12 +476,12 @@ export function ChatInput({
               aria-label={t("attachMenu")}
               className={cn(
                 "w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-300",
-                attachedImage || textAttachment
+                attachedImages.length > 0 || textAttachment
                   ? "bg-primary/20 text-primary border border-primary/30"
                   : "bg-foreground/5 text-muted-foreground hover:bg-foreground/10 hover:text-foreground",
               )}
             >
-              {processing
+              {processing || compressing
                 ? <Loader2 className="w-5 h-5 animate-spin" />
                 : <Plus className={cn("w-5 h-5 transition-transform duration-300", attachMenuOpen && "rotate-45")} />}
             </button>
@@ -452,10 +547,10 @@ export function ChatInput({
 
           <button
             type="submit"
-            disabled={!hasContent || isLoading || isUploading || !!processing}
+            disabled={!hasContent || isLoading || isUploading || !!processing || compressing}
             className={cn(
               "flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-300",
-              hasContent && !isLoading && !isUploading && !processing
+              hasContent && !isLoading && !isUploading && !processing && !compressing
                 ? "bg-gradient-purple text-primary-foreground glow-purple hover:scale-110 active:scale-95"
                 : "bg-foreground/5 text-muted-foreground cursor-not-allowed",
             )}

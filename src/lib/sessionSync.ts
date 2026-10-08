@@ -6,18 +6,45 @@ import { isNative, nativeBridge } from "./nativeBridge";
 
 const GOOGLE_TOKEN_KEY = "kojak_google_token";
 const LAST_SENT_KEY = "kojak_native_session_sent_at";
+// gmail.modify = ler + marcar como lido + mandar para a lixeira; gmail.send = responder/enviar.
 export const GOOGLE_SCOPES =
-  "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.events";
+  "https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/calendar.events";
 const NATIVE_REDIRECT = "com.kojak.ia://auth-callback";
 
 const listeners = new Set<() => void>();
-export const onGoogleTokenChange = (cb: () => void) => { listeners.add(cb); return () => listeners.delete(cb); };
+export const onGoogleTokenChange = (cb: () => void) => { listeners.add(cb); return () => { listeners.delete(cb); }; };
 
 export const getGoogleToken = () => localStorage.getItem(GOOGLE_TOKEN_KEY) || "";
 export function setGoogleToken(token: string) {
   if (token) localStorage.setItem(GOOGLE_TOKEN_KEY, token);
   else localStorage.removeItem(GOOGLE_TOKEN_KEY);
   listeners.forEach((l) => l());
+}
+
+/** Guarda o token (e o refresh token) do Google no servidor, para a conexão não cair sozinha. */
+export async function saveGoogleTokens(t: { accessToken?: string | null; refreshToken?: string | null }) {
+  if (!t.accessToken && !t.refreshToken) return;
+  try {
+    await supabase.functions.invoke("kojak-assistant", {
+      body: {
+        action: "save_google",
+        ...(t.accessToken ? { google_access_token: t.accessToken } : {}),
+        ...(t.refreshToken ? { google_refresh_token: t.refreshToken } : {}),
+      },
+    });
+  } catch { /* tenta de novo no próximo login */ }
+}
+
+export async function googleStatus(): Promise<boolean> {
+  try {
+    const { data } = await supabase.functions.invoke("kojak-assistant", { body: { action: "google_status" } });
+    return !!(data as any)?.connected;
+  } catch { return false; }
+}
+
+export async function disconnectGoogle() {
+  try { await supabase.functions.invoke("kojak-assistant", { body: { action: "google_disconnect" } }); } catch { /* noop */ }
+  setGoogleToken("");
 }
 
 async function pushSession(session: Session | null) {
@@ -56,6 +83,13 @@ export function initSessionSync() {
 
   supabase.auth.onAuthStateChange((event, session) => {
     if (session?.provider_token) setGoogleToken(session.provider_token);
+    // O refresh token só vem no momento do login com Google: salva no servidor.
+    // (setTimeout evita chamar o Supabase de dentro do callback do auth.)
+    if (event === "SIGNED_IN" && (session?.provider_refresh_token || session?.provider_token)) {
+      const accessToken = session.provider_token;
+      const refreshToken = session.provider_refresh_token;
+      setTimeout(() => { saveGoogleTokens({ accessToken, refreshToken }); }, 0);
+    }
     if (event === "SIGNED_OUT") {
       setGoogleToken("");
       pushSession(null);
@@ -73,9 +107,13 @@ export function initSessionSync() {
     const access_token = p.get("access_token");
     const refresh_token = p.get("refresh_token");
     const provider_token = p.get("provider_token");
+    const provider_refresh_token = p.get("provider_refresh_token");
     if (provider_token) setGoogleToken(provider_token);
     if (access_token && refresh_token) {
       await supabase.auth.setSession({ access_token, refresh_token });
+    }
+    if (provider_token || provider_refresh_token) {
+      await saveGoogleTokens({ accessToken: provider_token, refreshToken: provider_refresh_token });
     }
     try { await Browser.close(); } catch { /* noop */ }
   }).catch(() => undefined);

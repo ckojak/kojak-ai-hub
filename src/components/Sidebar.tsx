@@ -7,6 +7,7 @@ import {
   Settings,
   LogIn,
   Radio,
+  Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ChatHistory } from "./ChatHistory";
@@ -99,6 +100,18 @@ export function Sidebar({
         >
           <Radio className="w-5 h-5" />
           {!collapsed && <span className="text-sm">Kojak Live</span>}
+        </button>
+
+        <button
+          onClick={() => navigate("/assistente")}
+          className={cn(
+            "flex items-center gap-3 w-full px-3 py-2.5 rounded-xl transition-all",
+            "text-muted-foreground hover:text-foreground hover:bg-foreground/5",
+            collapsed && "justify-center"
+          )}
+        >
+          <Bot className="w-5 h-5" />
+          {!collapsed && <span className="text-sm">Assistente</span>}
         </button>
 
         <button

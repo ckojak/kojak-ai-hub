@@ -1,137 +1,136 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import {
   corsHeaders,
-  GEMINI_BASE,
-  geminiErrorResponse,
-  geminiStreamToOpenAISSE,
-  
-  < lovable-sync-1786317085
-=======
-  languageInstruction,
-main
+  buildMessages,
+  callGroq,
+  groqErrorResponse,
+  jsonError,
   missingKeyResponse,
-  toGeminiContents,
-} from "../_shared/gemini.ts";
+  resolveTier,
+  sseResponse,
+} from "../_shared/groq.ts";
+import { checkAndIncrementUsage, limitReachedResponse } from "../_shared/usage.ts";
+import { callGeminiFallback, geminiErrorResponse, geminiStreamToOpenAISSE } from "../_shared/gemini.ts";
+import { retrieveRelevantMemories, extractMemories } from "./memoryService.ts";
 
-const FAST_MODEL = "gemini-3.5-flash";
-const THINKING_MODEL = "gemini-3.1-pro-preview";
+const SYSTEM_PROMPT = `Você é a Kojak IA — uma inteligência artificial de alto nível, parceira de raciocínio do usuário: analítica, didática e humana.
 
-/** Aceita mode: "fast" | "thinking" ou tier: "rapido" | "raciocinio". */
-function pickModel(mode?: string, tier?: string) {
-  const v = String(mode || tier || "").toLowerCase();
-  return ["thinking", "raciocinio", "pro", "avancado"].includes(v) ? THINKING_MODEL : FAST_MODEL;
-}
+## QUEM VOCÊ É
+Especialista generalista com profundidade real em engenharia de software, produto, negócios, ciência e tecnologia. Você pensa como um sênior: enxerga o problema por trás do pedido, antecipa o próximo obstáculo e entrega a solução, não só a informação.
 
-
-const SYSTEM_PROMPT = `Você é Kojak IA — um parceiro de conversa inteligente, didático e humano.
-
-## COMO VOCÊ CONVERSA
-- **Curto por padrão.** Responda em 1-3 frases ou uma lista pequena. Nada de textões.
-- **Vá direto ao ponto.** Sem "Claro!", "Ótima pergunta!", "Espero ter ajudado".
-- **Didático, não catedrático.** Explique como um amigo especialista: exemplo rápido > teoria longa.
-- **Dialogue de verdade.** Termine com uma pergunta curta ou próximo passo quando fizer sentido — mantenha a conversa fluindo, sem forçar.
-- **Detalhe sob demanda.** Só solte respostas longas se o usuário pedir ("me explica em detalhes", "passo a passo", "aprofunda").
-- **Formatação enxuta.** Bullets curtos, negrito só no essencial. Nada de headings gigantes em resposta simples.
+## COMO VOCÊ RESPONDE
+- **Curto por padrão, profundo sob demanda.** 1-4 frases ou bullets enxutos. Só alongue se pedirem ("detalha", "passo a passo", "aprofunda") ou se o tema exigir.
+- **Didático, não catedrático.** Explique como um amigo especialista: analogia certeira + exemplo concreto.
+- **Antecipe.** Se a solução tem uma pegadinha comum, avise em uma linha.
+- **Dialogue.** Termine com uma pergunta curta ou próximo passo quando fizer sentido.
 
 ## CÓDIGO
-- Sempre em bloco com linguagem: \`\`\`ts, \`\`\`python, etc.
-- Comente só o que não é óbvio. Prefira código pronto para colar.
-
-## IDIOMA
-Português do Brasil, exceto se o usuário mudar.
-
-## MEMÓRIA
-Use o histórico da conversa para não repetir explicações já dadas.
+- Sempre em bloco com a linguagem declarada: \`\`\`ts, \`\`\`python, etc.
+- Código pronto para colar e rodar. Sem placeholders vagos.
+- Comente só o que não é óbvio. Aponte o erro real quando estiver debugando, não sintomas.
 
 ## LIMITE RÍGIDO
-Nunca crie, estruture ou desenvolva cursos, módulos de ensino ou currículos. Recuse educadamente e ofereça outra forma de ajudar.
-`;
+Nunca crie, estruture ou desenvolva cursos, módulos de ensino, aulas ou currículos. Recuse educadamente e ofereça outra forma de ajudar.`;
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
     const body = await req.json().catch(() => ({}));
-<<<<<  lovable-sync-1786317085
-    const { prompt, image, history, context, mode, tier, stream = true } = body || {};
-=======
-    const { prompt, image, history, context, mode, tier, language, stream = true } = body || {}; 
-     main
-    const MODEL = pickModel(mode, tier);
+    const {
+      prompt,
+      image,
+      reference_image,
+      history,
+      context,
+      mode,
+      tier,
+      language,
+      stream = true,
+      userId,
+      chatId,
+      webSearch,
+    } = body || {};
 
-    if (!prompt && !image) {
-      return new Response(
-        JSON.stringify({ error: "Prompt é obrigatório" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
+    if (!prompt && !image) return jsonError("Prompt é obrigatório");
 
-    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-    if (!GEMINI_API_KEY) return missingKeyResponse();
+    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
+    if (!GROQ_API_KEY) return missingKeyResponse();
 
-    const systemContent = (context && typeof context === "string" && context.trim()
-      ? `${SYSTEM_PROMPT}\n\n## CONTEXTO DO USUÁRIO\n${context.trim()}`
-      : SYSTEM_PROMPT) + languageInstruction(language);
+    const resolved = resolveTier(tier, mode);
 
-    const messages: any[] = [];
+    // Trava de uso diário gratuito (por tier, por usuário logado).
+    const usage = await checkAndIncrementUsage(userId, resolved);
+    if (!usage.allowed) return limitReachedResponse(usage);
 
-    if (Array.isArray(history)) {
-      for (const m of history.slice(-15)) {
-        if (m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string") {
-          messages.push({ role: m.role, content: m.content });
-        }
+    const messages = buildMessages({
+      systemPrompt: SYSTEM_PROMPT,
+      context,
+      language,
+      tier: resolved,
+      history,
+      prompt,
+      image,
+      referenceImage: reference_image,
+    });
+
+    // Injeta memórias relevantes sobre o usuário no system prompt (funciona
+    // tanto pro caminho Groq quanto pro fallback Gemini, pois messages[0] é
+    // compartilhado entre os dois).
+    if (userId && prompt) {
+      const memoryContext = await retrieveRelevantMemories(prompt, userId, 5);
+      if (memoryContext) {
+        messages[0].content += memoryContext;
       }
     }
 
-    if (image) {
-      messages.push({
-        role: "user",
-        content: [
-          { type: "text", text: prompt || "Analise esta imagem e descreva o que vê." },
-          { type: "image_url", image_url: { url: image } },
-        ],
-      });
-    } else {
-      messages.push({ role: "user", content: prompt });
+    const hasImage = !!(image || reference_image);
+    const useWeb = !!webSearch && !hasImage;
+
+    let response = await callGroq({ apiKey: GROQ_API_KEY, tier: resolved, messages, stream: !!stream, hasImage, webSearch: useWeb });
+    let usedGemini = false;
+
+    // Se o modelo agente (busca na web) recusar a requisição, refaz sem web search.
+    if (!response.ok && useWeb) {
+      console.warn("Web search indisponível, refazendo sem busca:", response.status);
+      response = await callGroq({ apiKey: GROQ_API_KEY, tier: resolved, messages, stream: !!stream, hasImage });
     }
 
-    const payload = {
-      systemInstruction: { parts: [{ text: systemContent }] },
-      contents: toGeminiContents(messages),
-    };
+    if (!response.ok && [429, 402, 500, 502, 503, 504].includes(response.status)) {
+      const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+      if (GEMINI_API_KEY) {
+        console.warn(`Groq falhou (${response.status}), caindo pro fallback Gemini...`);
+        usedGemini = true;
+        response = await callGeminiFallback(resolved, messages, GEMINI_API_KEY, !!stream);
+      }
+    }
 
-    const endpoint = stream
-      ? `${GEMINI_BASE}/${MODEL}:streamGenerateContent?alt=sse`
-      : `${GEMINI_BASE}/${MODEL}:generateContent`;
+    if (!response.ok) {
+      return usedGemini
+        ? await geminiErrorResponse(response, "Kojak Code Gemini fallback")
+        : await groqErrorResponse(response, "Kojak Code Groq");
+    }
 
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "x-goog-api-key": GEMINI_API_KEY,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) return await geminiErrorResponse(response, "Gemini error:");
+    // Extrai memórias novas dessa troca, sem travar a resposta.
+    if (userId && chatId && prompt) {
+      const messagesForExtraction = [
+        ...(Array.isArray(history) ? history : []),
+        { role: "user", content: prompt },
+      ];
+      extractMemories(messagesForExtraction, userId, chatId).catch((e) =>
+        console.error("Erro ao extrair memórias:", e)
+      );
+    }
 
     if (stream && response.body) {
-      return new Response(geminiStreamToOpenAISSE(response.body), {
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          Connection: "keep-alive",
-        },
-      });
+      return usedGemini ? sseResponse(geminiStreamToOpenAISSE(response.body)) : sseResponse(response.body);
     }
 
     const data = await response.json();
-    const content = (data?.candidates?.[0]?.content?.parts ?? [])
-      .map((p: any) => p?.text ?? "")
-      .join("") || "Desculpe, não consegui processar sua solicitação.";
+    const content = usedGemini
+      ? (data.candidates?.[0]?.content?.parts?.map((p: any) => p.text || "").join("") ||
+          "Desculpe, não consegui processar sua solicitação.")
+      : (data.choices?.[0]?.message?.content || "Desculpe, não consegui processar sua solicitação.");
     const hasCode = /```[\w]*\n[\s\S]*?```/.test(content);
 
     return new Response(
@@ -146,9 +145,6 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error("Kojak Code error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Erro desconhecido no processamento" }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return jsonError(error instanceof Error ? error.message : "Erro desconhecido no processamento");
   }
 });

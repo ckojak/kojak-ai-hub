@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sparkles, Mail, Lock, User, Eye, EyeOff, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { signInWithGoogle } from "@/lib/sessionSync";
+import { isNative } from "@/lib/nativeBridge";
 
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
@@ -59,13 +60,8 @@ export default function Auth() {
   const handleGoogle = async () => {
     setGoogleLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: window.location.origin,
-        },
-      });
-      if (error) throw new Error(error.message || "Falha no login com Google");
+      await signInWithGoogle({ webRedirect: window.location.origin });
+      if (isNative()) setGoogleLoading(false);
       // O Supabase redireciona a página automaticamente pro Google — não precisa navigate("/") aqui.
     } catch (error: any) {
       toast({

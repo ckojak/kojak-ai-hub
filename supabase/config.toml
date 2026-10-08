@@ -20,3 +20,9 @@ verify_jwt = false
 [cron."daily-keep-alive"]
 schedule = "0 11 * * *"
 function = "keep-alive"
+
+[functions.kojak-live]
+verify_jwt = false
+
+[functions.kojak-voice]
+verify_jwt = false

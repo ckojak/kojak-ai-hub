@@ -1,0 +1,1 @@
+DROP POLICY IF EXISTS "Upload de Imagens" ON storage.objects;

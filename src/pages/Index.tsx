@@ -27,7 +27,7 @@ const modeConfig: Record<string, { function: string; streams: boolean }> = {
 
 const Index = () => {
   const [activeMode, setActiveMode] = useState("chat");
-  const [aiTier, setAiTier] = useState<"rapido" | "raciocinio">("rapido");
+  const [aiTier, setAiTier] = useState<"basico" | "rapido" | "avancado" | "raciocinio">("rapido");
   const [isLoading, setIsLoading] = useState(false);
   const [streamingContent, setStreamingContent] = useState<string>("");
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -122,8 +122,9 @@ const Index = () => {
     return full;
   }, []);
 
-  const handleSendMessage = useCallback(async (content: string, mode: string, imageUrl?: string) => {
-    if (!content.trim() && !imageUrl && !referenceImage) return;
+  const handleSendMessage = useCallback(async (content: string, mode: string, imageUrls?: string[], options?: { webSearch?: boolean }) => {
+    const hasImages = !!(imageUrls && imageUrls.length > 0);
+    if (!content.trim() && !hasImages && !referenceImage) return;
 
     let chatId = currentChat?.id;
 
@@ -136,7 +137,7 @@ const Index = () => {
         }
         chatId = newChat.id;
       }
-      await addMessage("user", content, imageUrl ? "image" : "text", imageUrl);
+      await addMessage("user", content, hasImages ? "image" : "text", imageUrls?.[0], chatId);
       await logActivity(`Mensagem enviada no modo ${mode}`, { preview: content.slice(0, 100) });
     } else {
       if (localMessages.length === 0) {
@@ -150,8 +151,8 @@ const Index = () => {
         chat_id: "local",
         role: "user",
         content,
-        type: imageUrl ? "image" : "text",
-        media_url: imageUrl,
+        type: hasImages ? "image" : "text",
+        media_url: imageUrls?.[0],
         created_at: new Date().toISOString(),
       };
       setLocalMessages(prev => [...prev, userMessage]);
@@ -163,20 +164,20 @@ const Index = () => {
     try {
       const config = modeConfig[mode] || modeConfig.chat;
       const personalContext = profile?.personal_context || "";
-      const recentHistory = baseMessages.slice(-10).map((m) => ({ role: m.role, content: m.content }));
+      const recentHistory = baseMessages.slice(-20).map((m) => ({ role: m.role, content: m.content }));
 
-      const payload = {
-        prompt: content,
-        context: personalContext,
-        history: recentHistory,
-        image: imageUrl,
-        reference_image: referenceImage,
-        tier: aiTier,
-        lovable-sync-1786317085
-
-        language,
-        main
-        userId: user?.id ?? null,
+        const payload = {
+      prompt: content,
+      context: personalContext,
+      history: recentHistory,
+      image: imageUrls?.[0],
+      images: imageUrls,
+      reference_image: referenceImage,
+      tier: aiTier,
+      language,
+      userId: user?.id ?? null,
+      chatId: chatId ?? null,
+      webSearch: !!options?.webSearch,
       };
 
       if (config.streams) {
@@ -187,7 +188,7 @@ const Index = () => {
         const responseType = matches.length > 0 ? "code" : "text";
 
         if (user && chatId) {
-          await addMessage("assistant", fullText, responseType);
+          await addMessage("assistant", fullText, responseType, undefined, chatId);
           if (dbMessages.length === 0) {
             const title = content ? content.slice(0, 50) + (content.length > 50 ? "..." : "") : "Nova Conversa";
             await updateChatTitle(chatId, title);
@@ -211,7 +212,7 @@ const Index = () => {
         if (data.error) throw new Error(data.error);
 
         if (user && chatId) {
-          await addMessage("assistant", data.content, data.type || "text", data.mediaUrl);
+          await addMessage("assistant", data.content, data.type || "text", data.mediaUrl, chatId);
           if (dbMessages.length === 0) {
             const title = content ? content.slice(0, 50) + (content.length > 50 ? "..." : "") : "Imagem Enviada";
             await updateChatTitle(chatId, title);
@@ -232,8 +233,9 @@ const Index = () => {
       console.error("Erro ao enviar mensagem:", error);
       const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
       const requiresLogin = error instanceof Error && (error as any).requiresLogin;
+      const upgradeRequired = error instanceof Error && (error as any).upgradeRequired;
 
-      toast({ title: requiresLogin ? "Faça login para continuar" : "Erro", description: errorMessage, variant: "destructive" });
+      toast({ title: upgradeRequired ? t("limitReachedTitle") : requiresLogin ? "Faça login para continuar" : "Erro", description: errorMessage, variant: "destructive" });
       setStreamingContent("");
 
       if (requiresLogin) {
@@ -249,14 +251,14 @@ const Index = () => {
         created_at: new Date().toISOString(),
       };
       if (user && chatId) {
-        await addMessage("assistant", errorAssistantMessage.content, "text");
+        await addMessage("assistant", errorAssistantMessage.content, "text", undefined, chatId);
       } else {
         setLocalMessages(prev => [...prev, errorAssistantMessage]);
       }
     } finally {
       setIsLoading(false);
     }
-  }, [user, currentChat, createChat, addMessage, updateChatTitle, dbMessages, profile, toast, logActivity, referenceImage, localMessages.length, baseMessages, streamFromFunction, aiTier, language, navigate]);
+  }, [user, currentChat, createChat, addMessage, updateChatTitle, dbMessages, profile, toast, logActivity, referenceImage, localMessages.length, baseMessages, streamFromFunction, aiTier, language, navigate, t]);
 
   const handleNewChat = useCallback(async () => {
     if (user) await createChat(activeMode);
@@ -277,7 +279,7 @@ const Index = () => {
 
   if (authLoading) {
     return (
-      <div className="h-screen bg-background flex items-center justify-center">
+      <div className="h-[100dvh] bg-background flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
           <p className="text-muted-foreground">{t("loading")}</p>
@@ -287,7 +289,7 @@ const Index = () => {
   }
 
   return (
-    <div className="h-screen bg-background flex flex-col overflow-hidden">
+    <div className="h-[100dvh] bg-background flex flex-col overflow-hidden">
       <Sidebar chats={chats} currentChatId={currentChat?.id} onSelectChat={selectChat} onNewChat={handleNewChat} onDeleteChat={deleteChat} onOpenSettings={() => setSettingsOpen(true)} onOpenLive={handleOpenLive} />
       <MobileHistorySheet open={historyOpen} onOpenChange={setHistoryOpen} chats={chats} currentChatId={currentChat?.id} onSelectChat={selectChat} onNewChat={handleNewChat} onDeleteChat={deleteChat} />
       <SettingsPanel open={settingsOpen} onOpenChange={setSettingsOpen} />

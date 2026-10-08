@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Política de Privacidade — Kojak AI</title>
+<meta name="description" content="Como o Kojak AI trata os seus dados, incluindo os dados do Google (Gmail e Agenda).">
+<style>
+  :root {
+    --bg: #faf9fd; --fg: #1f1b2e; --muted: #5f5a73; --line: #e2dff0;
+    --accent: #6d28d9; --card: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #15121f; --fg: #ece9f7; --muted: #a7a1bd; --line: #2e2942; --accent: #b794f6; --card: #1c1829; }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 17px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header { border-bottom: 1px solid var(--line); }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 0 20px; }
+  header .wrap { display: flex; justify-content: space-between; align-items: center; padding-top: 18px; padding-bottom: 18px; gap: 16px; flex-wrap: wrap; }
+  .brand { font-weight: 700; font-size: 19px; color: var(--fg); text-decoration: none; }
+  .brand span { color: var(--accent); }
+  nav a { color: var(--muted); text-decoration: none; margin-left: 16px; font-size: 15px; }
+  nav a:hover, nav a[aria-current] { color: var(--accent); }
+  main { padding: 40px 0 72px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 8px; letter-spacing: -0.02em; }
+  .updated { color: var(--muted); font-size: 15px; margin: 0 0 32px; }
+  h2 { font-size: 21px; margin: 40px 0 8px; letter-spacing: -0.01em; }
+  p, li { max-width: 68ch; }
+  ul { padding-left: 22px; }
+  li { margin: 6px 0; }
+  a { color: var(--accent); }
+  .box {
+    background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--accent);
+    border-radius: 6px; padding: 16px 20px; margin: 24px 0;
+  }
+  .box p { margin: 0; }
+  footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; padding: 24px 0; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <a class="brand" href="https://kojakai.com.br">Kojak <span>AI</span></a>
+    <nav>
+      <a href="/privacidade.html" aria-current="page">Privacidade</a>
+      <a href="/termos.html">Termos de Serviço</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <h1>Política de Privacidade</h1>
+  <p class="updated">Última atualização: outubro de 2026</p>
+
+  <p>O Kojak AI é um assistente pessoal com comandos de voz e texto. Esta política explica quais dados o Kojak AI usa, para quê, com quem eles passam e como você controla tudo isso. Ela segue a Lei Geral de Proteção de Dados (LGPD, Lei 13.709/2018).</p>
+
+  <h2>1. Dados que usamos</h2>
+  <ul>
+    <li><strong>Conta:</strong> nome, e-mail e foto de perfil, recebidos quando você entra com o Google.</li>
+    <li><strong>Conversas e memórias:</strong> as mensagens que você troca com o assistente e os fatos que você pede para ele lembrar (por exemplo, sua cidade ou preferências).</li>
+    <li><strong>Dados do Google, só se você conectar sua conta:</strong>
+      <ul>
+        <li><strong>Gmail:</strong> permissão somente de leitura, para buscar e ler e-mails quando você pede.</li>
+        <li><strong>Google Agenda:</strong> permissão para listar seus compromissos e criar eventos quando você pede.</li>
+      </ul>
+    </li>
+    <li><strong>Tokens de acesso do Google:</strong> códigos que permitem ao assistente acessar o Gmail e a Agenda em seu nome, sem guardar a sua senha.</li>
+    <li><strong>Registros técnicos:</strong> informações básicas de funcionamento e de uso do serviço, para corrigir erros e proteger o app.</li>
+  </ul>
+
+  <h2>2. Como usamos os dados do Google</h2>
+  <p>Usamos o acesso ao Gmail e à Agenda somente para executar o que você pediu ao assistente: listar e ler e-mails, listar compromissos e criar eventos. Não usamos esses dados para nenhuma outra finalidade.</p>
+  <div class="box">
+    <p>O uso e a transferência, para qualquer outro aplicativo, das informações recebidas das APIs do Google pelo Kojak AI obedecem à <a href="https://developers.google.com/terms/api-services-user-data-policy">Política de Dados do Usuário dos Serviços de API do Google</a>, incluindo os requisitos de Uso Limitado.</p>
+  </div>
+  <p>Na prática, isso significa que:</p>
+  <ul>
+    <li>não vendemos seus dados do Google;</li>
+    <li>não usamos esses dados para publicidade;</li>
+    <li>não usamos esses dados para treinar modelos de inteligência artificial;</li>
+    <li>pessoas da nossa equipe não leem seus e-mails nem sua agenda, exceto com a sua autorização expressa, para investigar abuso ou por exigência legal.</li>
+  </ul>
+
+  <h2>3. Com quem os dados passam</h2>
+  <p>Para o assistente funcionar, usamos serviços de terceiros que processam dados em nosso nome:</p>
+  <ul>
+    <li><strong>Supabase:</strong> banco de dados e autenticação.</li>
+    <li><strong>Vercel:</strong> hospedagem do site e do app.</li>
+    <li><strong>Provedores de inteligência artificial</strong> (como a Groq): recebem o texto do seu pedido e, quando você pede algo sobre e-mails ou agenda, o trecho necessário para gerar a resposta.</li>
+    <li><strong>Google:</strong> para o login e para o acesso ao Gmail e à Agenda que você autorizou.</li>
+  </ul>
+  <p>Não vendemos nem alugamos dados pessoais.</p>
+
+  <h2>4. Armazenamento e prazo</h2>
+  <p>O conteúdo dos seus e-mails e da sua agenda é lido na hora do pedido e não é copiado para um banco de dados nosso. Mas o que o assistente disser sobre eles (por exemplo, o remetente e o assunto de um e-mail) pode ficar no histórico da conversa. Conversas, memórias e tokens ficam guardados enquanto sua conta existir ou até você pedir a exclusão.</p>
+
+  <h2>5. Segurança</h2>
+  <p>Os dados ficam em um banco com controle de acesso por usuário: cada pessoa só alcança os próprios registros. As conexões usam HTTPS. Nenhum sistema é 100% seguro, mas trabalhamos para reduzir riscos e corrigir falhas rapidamente.</p>
+
+  <h2>6. Seus direitos</h2>
+  <p>Pela LGPD, você pode pedir confirmação de que tratamos seus dados, acesso, correção, exclusão, portabilidade e informações sobre o compartilhamento, além de revogar o consentimento a qualquer momento. Para isso, escreva para o contato abaixo.</p>
+  <p>Para retirar o acesso do Kojak AI à sua conta Google, use o botão <strong>Desconectar</strong> na tela do assistente ou revogue em <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.</p>
+
+  <h2>7. Menores de idade</h2>
+  <p>O Kojak AI não é destinado a menores de 18 anos, e não coletamos dados de menores de forma intencional.</p>
+
+  <h2>8. Mudanças nesta política</h2>
+  <p>Se algo importante mudar, atualizaremos esta página e a data no topo. Mudanças que alterem o uso dos seus dados do Google serão avisadas dentro do app.</p>
+
+  <h2>9. Contato</h2>
+  <p>Dúvidas ou pedidos sobre seus dados: <a href="mailto:COLOQUE-SEU-EMAIL@AQUI">COLOQUE-SEU-EMAIL@AQUI</a></p>
+</main>
+
+<footer>
+  <div class="wrap">Kojak AI · <a href="/termos.html">Termos de Serviço</a></div>
+</footer>
+</body>
+</html>

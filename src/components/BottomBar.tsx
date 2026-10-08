@@ -1,5 +1,6 @@
-import { Code2, Camera, Play, MessageCircle, History, Settings, HeartPulse, Radio } from "lucide-react";
+import { Code2, Camera, Play, MessageCircle, History, Settings, HeartPulse, Radio, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useNavigate } from "react-router-dom";
 
 interface BottomBarProps {
   activeMode: string;
@@ -18,6 +19,7 @@ const modes = [
 ];
 
 export function BottomBar({ activeMode, onModeChange, onOpenHistory, onOpenSettings, onOpenLive }: BottomBarProps) {
+  const navigate = useNavigate();
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden">
       {/* Glassmorphism background */}
@@ -41,6 +43,14 @@ export function BottomBar({ activeMode, onModeChange, onOpenHistory, onOpenSetti
         >
           <Radio className="w-5 h-5" />
           <span className="text-[10px] font-medium">Live</span>
+        </button>
+
+        <button
+          onClick={() => navigate("/assistente")}
+          className="flex flex-col items-center gap-1 px-3 py-2 text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <Bot className="w-5 h-5" />
+          <span className="text-[10px] font-medium">Assistente</span>
         </button>
 
         {/* Mode buttons */}

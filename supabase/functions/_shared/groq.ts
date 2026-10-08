@@ -173,6 +173,9 @@ export async function groqErrorResponse(response: Response, prefix: string) {
   return jsonError(`Erro na IA: ${response.status} ${errText.slice(0, 300)}`);
 }
 
+/** Modelo agente da Groq com busca na web nativa. */
+export const WEB_SEARCH_MODEL = "groq/compound";
+
 /** Chama a Groq chat.completions com a configuração do tier escolhido. */
 export async function callGroq(opts: {
   apiKey: string;
@@ -180,21 +183,43 @@ export async function callGroq(opts: {
   messages: any[];
   stream: boolean;
   hasImage?: boolean;
+  webSearch?: boolean;
 }) {
   const cfg = TIERS[opts.tier];
-  const model = opts.hasImage ? VISION_MODEL : cfg.model;
+  const model = opts.webSearch
+    ? WEB_SEARCH_MODEL
+    : opts.hasImage
+      ? VISION_MODEL
+      : cfg.model;
+
+  // O modelo agente (web search) tem orçamento de tokens menor: encurta o
+  // histórico e o teto de saída pra não estourar (413).
+  // O modelo agente tem orçamento de tokens bem menor: usa um system curto,
+  // só as últimas trocas e conteúdo truncado.
+  const messages = opts.webSearch
+    ? [
+        {
+          role: "system",
+          content:
+            "Você é a Kojak IA. Busque na web quando precisar de dados atuais e responda curto (até 4 frases), em português do Brasil, citando a fonte quando relevante.",
+        },
+        ...opts.messages.slice(-3).map((m: any) =>
+          typeof m.content === "string" ? { ...m, content: m.content.slice(0, 1500) } : m,
+        ),
+      ]
+    : opts.messages;
 
   const payload: Record<string, unknown> = {
     model,
-    messages: opts.messages,
+    messages,
     temperature: cfg.temperature,
-    max_tokens: cfg.max_tokens,
+    max_tokens: opts.webSearch ? Math.min(cfg.max_tokens, 1024) : cfg.max_tokens,
     top_p: 0.95,
     stream: opts.stream,
   };
 
-  // reasoning_effort só é aceito pelos modelos gpt-oss (e sem imagem).
-  if (cfg.reasoning_effort && model.startsWith("openai/gpt-oss")) {
+  // reasoning_effort só é aceito pelos modelos gpt-oss (e sem imagem/web).
+  if (!opts.webSearch && cfg.reasoning_effort && model.startsWith("openai/gpt-oss")) {
     payload.reasoning_effort = cfg.reasoning_effort;
     payload.reasoning_format = "hidden";
   }

@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
-  X, 
   History, 
   Brain, 
   Plug, 
@@ -378,12 +377,6 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
             <h2 className="text-lg font-semibold">
               {activeSection ? menuItems.find((m) => m.id === activeSection)?.label : t("settings")}
             </h2>
-            <button
-              onClick={() => activeSection ? setActiveSection(null) : onOpenChange(false)}
-              className="p-2 rounded-lg hover:bg-foreground/10 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
           </div>
 
           {/* Content */}

@@ -6,6 +6,7 @@ import { useLanguage, LOCALE_MAP } from "@/hooks/useLanguage";
 import { useToast } from "@/hooks/use-toast";
 import { KOJAK_LOGO_BASE64 } from "@/assets/kojak-logo";
 import { cn } from "@/lib/utils";
+import { speak, stopSpeech } from "@/lib/streamSpeech";
 
 interface KojakLiveProps {
   onClose: () => void;
@@ -14,7 +15,7 @@ interface KojakLiveProps {
 type LiveStatus = "connecting" | "listening" | "capturing" | "thinking" | "speaking" | "error";
 
 /** Silêncio necessário (ms) para considerar que a pessoa terminou de falar. */
-const SILENCE_MS = 900;
+const SILENCE_MS = 800;
 /** Duração mínima (ms) de fala para valer o envio — corta tosse, clique, "ãh". */
 const MIN_SPEECH_MS = 400;
 /** Duração máxima de um turno. */
@@ -136,63 +137,14 @@ export function KojakLive({ onClose }: KojakLiveProps) {
       .trim();
     if (!clean) { finishSpeaking(); return; }
 
-    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
-    window.speechSynthesis?.cancel();
     setStatus("speaking");
-
-    const sentences = splitIntoSentences(clean);
-    if (sentences.length === 0) { finishSpeaking(); return; }
-
     try {
-      let nextAudioPromise: Promise<string | null> = fetchSentenceAudio(sentences[0]);
-
-      for (let i = 0; i < sentences.length; i++) {
-        if (closedRef.current) return;
-
-        const audioUrl = await nextAudioPromise;
-
-        // Prefetch: já dispara a geração da próxima frase enquanto essa toca.
-        if (i + 1 < sentences.length) {
-          nextAudioPromise = fetchSentenceAudio(sentences[i + 1]);
-        }
-
-        if (closedRef.current) return;
-
-        if (!audioUrl) {
-          // Sem voz neural pra essa frase específica: usa a voz do navegador só nela.
-          await new Promise<void>((resolve) => {
-            if (!("speechSynthesis" in window)) { resolve(); return; }
-            const u = new SpeechSynthesisUtterance(sentences[i]);
-            u.lang = LOCALE_MAP[language] || "pt-BR";
-            u.rate = 1.0;
-            u.pitch = 0.85;
-            const voices = window.speechSynthesis.getVoices();
-            const preferred = voices.find(
-              (v) => v.lang.startsWith(u.lang.slice(0, 2)) &&
-                /male|masculin|ricardo|daniel|google/i.test(v.name) && !/female|feminina/i.test(v.name),
-            ) || voices.find((v) => v.lang.startsWith(u.lang.slice(0, 2)));
-            if (preferred) u.voice = preferred;
-            u.onend = () => resolve();
-            u.onerror = () => resolve();
-            window.speechSynthesis.speak(u);
-          });
-          continue;
-        }
-
-        await new Promise<void>((resolve) => {
-          const audio = new Audio(audioUrl);
-          audioRef.current = audio;
-          audio.onended = () => resolve();
-          audio.onerror = () => resolve();
-          audio.play().catch(() => resolve());
-        });
-      }
+      await speak(clean, { voice: "Algenib", lang: LOCALE_MAP[language] || "pt-BR" });
     } catch (err) {
-      console.error("Kojak Live voz neural indisponível:", err);
+      console.error("Kojak Live voz:", err);
       if (!closedRef.current) speakBrowserFallback(clean);
       return;
     }
-
     if (!closedRef.current) finishSpeaking();
   }, [finishSpeaking, fetchSentenceAudio, language, speakBrowserFallback]);
 
@@ -229,6 +181,7 @@ export function KojakLive({ onClose }: KojakLiveProps) {
         return;
       }
 
+      console.log(`[voz] transcrição + resposta prontas: ${Math.round(performance.now())}ms`);
       historyRef.current.push({ role: "user", content: data.transcript });
       historyRef.current.push({ role: "assistant", content: data.reply });
       setLastUser(data.transcript);
@@ -258,7 +211,7 @@ export function KojakLive({ onClose }: KojakLiveProps) {
     audioCtxRef.current?.close().catch(() => undefined);
     audioCtxRef.current = null;
     if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
-    window.speechSynthesis?.cancel();
+    stopSpeech();
   }, []);
 
   useEffect(() => {
@@ -386,6 +339,7 @@ export function KojakLive({ onClose }: KojakLiveProps) {
               speakingSinceRef.current = null;
               silenceSinceRef.current = null;
               if (duration >= MIN_SPEECH_MS) {
+                console.log(`[voz] fim da fala: ${Math.round(performance.now())}ms`);
                 busyRef.current = true;
                 stopRecording();
               } else {

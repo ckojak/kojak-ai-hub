@@ -11,7 +11,10 @@ import { cn } from "@/lib/utils";
 import { useUtteranceRecorder } from "@/hooks/useUtteranceRecorder";
 import { speak, stopSpeech, unlockAudio } from "@/lib/streamSpeech";
 import { isNative, nativeBridge, type NativeState, type SetupStatus } from "@/lib/nativeBridge";
-import { getGoogleToken, onGoogleTokenChange, signInWithGoogle, GOOGLE_SCOPES, setGoogleToken } from "@/lib/sessionSync";
+import {
+  getGoogleToken, onGoogleTokenChange, signInWithGoogle, GOOGLE_SCOPES,
+  googleStatus, disconnectGoogle,
+} from "@/lib/sessionSync";
 
 type Msg = { role: "user" | "assistant"; content: string; actions?: string[] };
 const HISTORY_KEY = "kojak_assistant_history";
@@ -42,6 +45,7 @@ export default function Assistant() {
   });
   const [busy, setBusy] = useState<"" | "transcribing" | "thinking" | "speaking">("");
   const [googleToken, setGToken] = useState(getGoogleToken());
+  const [serverGoogle, setServerGoogle] = useState(false); // token guardado no servidor
   const [needsGoogle, setNeedsGoogle] = useState(false);
   const [bgOn, setBgOn] = useState(false);
   const [nativeState, setNativeState] = useState<NativeState | "">("");
@@ -56,6 +60,14 @@ export default function Assistant() {
   }, [messages]);
 
   useEffect(() => onGoogleTokenChange(() => setGToken(getGoogleToken())), []);
+
+  // Pergunta ao servidor se o Google está conectado (não depende do token local, que expira em 1h)
+  useEffect(() => {
+    if (!user) { setServerGoogle(false); return; }
+    let alive = true;
+    googleStatus().then((ok) => { if (alive) { setServerGoogle(ok); if (ok) setNeedsGoogle(false); } });
+    return () => { alive = false; };
+  }, [user, googleToken]);
 
   useEffect(() => {
     if (!native) return;
@@ -91,6 +103,7 @@ export default function Assistant() {
       if (errText) {
         if (String(errText).includes("google_not_connected")) {
           setNeedsGoogle(true);
+          setServerGoogle(false);
           throw new Error("Conecte sua conta Google para usar Gmail e Agenda.");
         }
         throw new Error(String(errText));
@@ -137,12 +150,10 @@ export default function Assistant() {
       });
       if (error) throw new Error(error.message);
       const text = String(data?.transcript || data?.text || "").trim();
-      console.log(`[voz] transcrição pronta: ${Math.round(performance.now())}ms`);
       if (!text) { setBusy(""); return; }
       setMessages((m) => [...m, { role: "user", content: text }]);
       setBusy("thinking");
       const { reply, actions } = await runAssistant(text);
-      console.log(`[voz] resposta pronta: ${Math.round(performance.now())}ms`);
       setMessages((m) => [...m, { role: "assistant", content: reply, actions }]);
       setBusy("speaking");
       await speak(reply.replace(/[#*_`~]/g, ""));
@@ -186,36 +197,41 @@ export default function Assistant() {
     if ("mic" in s) setSetup(s); else fail(s.message);
   };
 
+  const googleOk = (!!googleToken || serverGoogle) && !needsGoogle;
+
   const statusText = recording ? "Ouvindo…" : busy === "transcribing" ? "Transcrevendo…" :
     busy === "thinking" ? "Pensando…" : busy === "speaking" ? "Falando…" :
     nativeState === "listening" || nativeState === "wake" ? "Ouvindo…" :
     nativeState === "thinking" ? "Pensando…" : nativeState === "speaking" ? "Falando…" : "Toque para falar";
 
   return (
-    <div className="h-[100dvh] flex flex-col bg-background text-foreground">
-      <header className="flex items-center gap-2 p-4 border-b border-border shrink-0">
+    <div className="h-[100dvh] w-full max-w-full overflow-x-hidden flex flex-col bg-background text-foreground">
+      <header
+        className="flex items-center gap-2 px-3 sm:px-4 pb-3 border-b border-border shrink-0"
+        style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 0.75rem)" }}
+      >
         <Button variant="ghost" size="icon" onClick={() => navigate("/")} aria-label="Voltar"><ArrowLeft className="w-5 h-5" /></Button>
-        <h1 className="font-semibold flex-1">Assistente Kojak</h1>
-        <Button variant="ghost" size="sm" onClick={() => { stopSpeech(); setMessages([]); }}>
-          <Trash2 className="w-4 h-4 mr-1" /> Limpar conversa
+        <h1 className="font-semibold flex-1 truncate">Assistente Kojak</h1>
+        <Button variant="ghost" size="sm" aria-label="Limpar conversa" onClick={() => { stopSpeech(); setMessages([]); }}>
+          <Trash2 className="w-4 h-4 sm:mr-1" /> <span className="hidden sm:inline">Limpar conversa</span>
         </Button>
       </header>
 
-      <div className="px-4 pt-3 space-y-3 shrink-0">
+      <div className="px-3 sm:px-4 pt-3 space-y-3 shrink-0">
         {native && (
           <div className="glass-card rounded-xl p-3 flex items-center justify-between gap-3">
-            <span className="text-sm">Ouvir 'Kojak' em segundo plano (app Android)</span>
+            <span className="text-sm min-w-0">Ouvir 'Kojak' em segundo plano (app Android)</span>
             <Switch checked={bgOn} onCheckedChange={toggleBg} />
           </div>
         )}
         <div className="flex flex-wrap gap-2">
-          {googleToken && !needsGoogle ? (
+          {googleOk ? (
             <Badge variant="secondary" className="gap-1"><Check className="w-3 h-3" /> Google conectado</Badge>
           ) : (
             <Button size="sm" variant="outline" onClick={connectGoogle}>Conectar Google</Button>
           )}
-          {googleToken && !needsGoogle && (
-            <Button size="sm" variant="ghost" onClick={() => setGoogleToken("")}>Desconectar</Button>
+          {googleOk && (
+            <Button size="sm" variant="ghost" onClick={async () => { await disconnectGoogle(); setServerGoogle(false); }}>Desconectar</Button>
           )}
           {native && (
             <Button size="sm" variant="outline" onClick={configure}><Settings2 className="w-4 h-4 mr-1" /> Configurar Jarvis</Button>
@@ -233,18 +249,20 @@ export default function Assistant() {
         )}
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 sm:px-4 py-4 space-y-3">
         {messages.length === 0 && (
-          <p className="text-center text-sm text-muted-foreground mt-10">Peça algo como "quais meus próximos compromissos?"</p>
+          <p className="text-center text-sm text-muted-foreground mt-10 px-4">
+            Peça algo como "quais meus próximos compromissos?" ou "tem e-mail novo?"
+          </p>
         )}
         {messages.map((m, i) => (
           <div key={i} className={cn("flex flex-col", m.role === "user" ? "items-end" : "items-start")}>
-            <div className={cn("max-w-[85%] rounded-2xl px-4 py-2 text-sm whitespace-pre-wrap",
+            <div className={cn("max-w-[88%] sm:max-w-[75%] rounded-2xl px-4 py-2 text-sm whitespace-pre-wrap break-words",
               m.role === "user" ? "bg-primary text-primary-foreground" : "glass-card")}>
               {m.content}
             </div>
             {m.actions && m.actions.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-1">
+              <div className="flex flex-wrap gap-1 mt-1 max-w-[88%]">
                 {m.actions.map((a, j) => <Badge key={j} variant="outline" className="text-[10px]">{a}</Badge>)}
               </div>
             )}
@@ -253,7 +271,7 @@ export default function Assistant() {
         <div ref={bottomRef} />
       </div>
 
-      <div className="flex flex-col items-center gap-3 p-6 shrink-0" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 1.5rem)" }}>
+      <div className="flex flex-col items-center gap-3 p-4 sm:p-6 shrink-0" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 1.25rem)" }}>
         <span className="text-sm text-muted-foreground flex items-center gap-2">
           {(busy === "transcribing" || busy === "thinking") && <Loader2 className="w-4 h-4 animate-spin" />}
           {statusText}
@@ -262,11 +280,11 @@ export default function Assistant() {
           onClick={onMic}
           disabled={busy === "transcribing" || busy === "thinking"}
           aria-label="Falar com o assistente"
-          className={cn("w-24 h-24 rounded-full bg-gradient-purple text-primary-foreground flex items-center justify-center transition-transform disabled:opacity-60",
+          className={cn("w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-purple text-primary-foreground flex items-center justify-center transition-transform disabled:opacity-60",
             recording && "animate-pulse")}
           style={{ transform: `scale(${1 + level * 0.15})` }}
         >
-          <Mic className="w-10 h-10" />
+          <Mic className="w-9 h-9 sm:w-10 sm:h-10" />
         </button>
       </div>
     </div>
